@@ -1,0 +1,13 @@
+{
+  "name": "keyloom",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first adaptive practice companion for Monkeytype",
+  "scripts": {
+    "test": "node --test",
+    "start": "node scripts/serve.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

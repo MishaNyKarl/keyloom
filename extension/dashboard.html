@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark"><title>Keyloom · твой ритм печати</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="core.js" defer></script><script src="words.js" defer></script>
+  <script src="analytics.js" defer></script>
+  <script src="vendor/lz-string.js" defer></script><script src="practice.js" defer></script>
+  <script src="demo.js" defer></script><script src="dashboard.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="dashboard.html" aria-label="Keyloom, обзор"><span class="brand-mark">k<span>↗</span></span>keyloom<span class="beta">alpha</span></a>
+    <div class="sidebar-label">ТВОЯ ПРАКТИКА</div>
+    <nav aria-label="Главная навигация">
+      <button class="nav-item selected" data-view="overview"><span>◫</span>Обзор<span class="nav-dot"></span></button>
+      <button class="nav-item" data-view="practice"><span>⌁</span>Тренировка</button>
+      <button class="nav-item" data-view="statistics"><span>▥</span>Статистика</button>
+      <button class="nav-item" data-view="history"><span>◷</span>История</button>
+      <button class="nav-item" data-view="settings"><span>⚙</span>Настройки</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="local-card"><span class="status-dot"></span><strong>Только на твоём устройстве</strong><p>Твой прогресс хранится<br>в этом браузере.</p></div>
+      <a href="https://monkeytype.com" target="_blank" rel="noreferrer" class="monkey-link">Открыть Monkeytype <span>↗</span></a>
+      <div class="version">KEYLOOM <span>v0.2.0</span></div>
+    </div>
+  </aside>
+  <main>
+    <header class="topbar"><span>МАЛЕНЬКИЕ ШАГИ. УВЕРЕННЫЙ РИТМ.</span><div class="top-controls"><span id="environment" class="environment"></span><label class="select-label">Язык<select id="language"><option value="english">English</option><option value="russian">Русский</option></select></label><span class="avatar">k.</span></div></header>
+    <div id="demo-banner" class="notice" hidden>Демонстрационные данные · это пример интерфейса, а не твои результаты. <a href="dashboard.html">Вернуться к своим данным →</a></div>
+    <div id="preview-banner" class="notice" hidden>Это предпросмотр. Запись тестов работает после установки расширения в Chrome или Edge.</div>
+    <div class="page-content">
+      <section id="overview" class="view">
+        <div class="page-heading"><div><div class="eyebrow">ТВОЙ ПРОГРЕСС</div><h1>Найди свой ритм<span>.</span></h1><p>Замечай сложные места. Тренируйся с фокусом.</p></div><label class="period-label">Период<select id="period"><option value="30">Последние 30 дней</option><option value="7">Последние 7 дней</option><option value="all">Всё время</option></select></label></div>
+        <div class="stats-grid">
+          <article class="stat"><span class="stat-label">Скорость печати <span>↗</span></span><div><strong id="stat-wpm">—</strong><span class="unit">wpm</span></div><small>медиана завершённых тестов</small></article>
+          <article class="stat"><span class="stat-label">Точность <span>◎</span></span><div><strong id="stat-accuracy">—</strong><span class="unit">%</span></div><small>с учётом исправленных ошибок</small></article>
+          <article class="stat"><span class="stat-label">Время практики <span>◷</span></span><div><strong id="stat-minutes">—</strong><span class="unit">мин</span></div><small>от первого до последнего ввода</small></article>
+          <article class="stat"><span class="stat-label">Завершено тестов <span>▤</span></span><div><strong id="stat-sessions">0</strong><span class="unit">тестов</span></div><small id="stat-samples">профиль ещё формируется</small></article>
+        </div>
+        <div class="middle-grid">
+          <article class="panel chart-panel"><div class="panel-heading"><h2>Каждый тест — шаг вперёд</h2><span class="chart-legend"><i></i> Скорость, wpm</span></div><div id="chart" class="chart"></div><p class="chart-caption">Оценка Keyloom по событиям ввода. Может отличаться от WPM в Monkeytype.</p></article>
+          <article class="practice-card"><div class="eyebrow">СЛЕДУЮЩИЙ ШАГ <span>↗</span></div><h2 id="practice-title">Начнём<br>со знакомства.</h2><p id="practice-description">Небольшой тест поможет увидеть твой ритм и первые сложные сочетания.</p><div id="focus-chips" class="focus-chips"></div><div class="practice-meta"><span>40 слов</span><span>≈ 1 минута</span></div><button id="start-practice" class="primary">Подобрать тренировку <span>→</span></button></article>
+        </div>
+        <div class="bottom-grid">
+          <article class="panel weaknesses"><div class="panel-heading"><div><h2>Здесь можно стать лучше</h2><p>Приоритет учитывает ошибки и чистую скорость.</p></div><div class="segments" aria-label="Тип статистики"><button data-group="pairs" class="active" aria-pressed="true">Связки</button><button data-group="words" aria-pressed="false">Слова</button></div></div><div id="weakness-table"></div><div class="panel-footer">От 5 наблюдений · редкие сочетания пока не ранжируем</div></article>
+          <article class="panel keyboard-panel"><div class="panel-heading"><div><h2>Карта точности</h2><p>Где пальцам нужно чуть больше практики.</p></div></div><div id="keyboard" class="keyboard"></div><div class="heat-legend"><span>меньше ошибок</span><i></i><i></i><i></i><i></i><span>больше</span></div><p class="keyboard-note">Буквы, а не физические клавиши. Наведи, чтобы увидеть статистику.</p></article>
+        </div>
+      </section>
+      <section id="practice" class="view" hidden>
+        <div class="page-heading"><div><div class="eyebrow">ОСОЗНАННАЯ ПРАКТИКА</div><h1>Одна задача за раз<span>.</span></h1><p>Сначала точность. Скорость придёт с уверенностью.</p></div></div>
+        <div id="practice-progress" class="stats-grid"></div>
+        <article class="panel workout-settings">
+          <label>Язык тренировки<select id="practice-language"><option value="english">English</option><option value="russian">Русский</option></select></label>
+          <label>Что тренировать<select id="practice-kind"><option value="pairs">Сложные связки</option><option value="words">Сложные слова</option><option value="mixed">Обычная практика</option></select></label>
+          <label>Примерная длительность<select id="practice-duration"><option value="30">30 секунд</option><option value="60" selected>1 минута</option><option value="120">2 минуты</option><option value="180">3 минуты</option><option value="300">5 минут</option></select></label>
+          <p id="duration-explanation" class="muted"></p>
+        </article>
+        <article class="panel exercise"><div class="panel-heading"><h2 id="exercise-title">Твоя тренировка</h2><span class="pill">40 слов</span></div><p id="exercise-reason"></p><div id="exercise-focus" class="focus-chips"></div><label for="exercise-text" class="field-label">ТЕКСТ ТРЕНИРОВКИ</label><textarea id="exercise-text" readonly rows="7"></textarea><div class="exercise-actions"><button id="launch" class="primary">Начать в Monkeytype ↗</button><button id="regenerate" class="secondary">Другие слова</button><button id="copy" class="text-button">Скопировать текст</button></div><p class="muted">Откроется custom-тест. Если ссылка не сработает: custom → change → вставь текст. Для записи результатов расширение должно быть установлено.</p></article>
+        <article class="panel workout-results"><div class="panel-heading"><div><div class="eyebrow">ПОСЛЕ ПРАКТИКИ</div><h2>Как прошла тренировка</h2></div><label class="select-label">Попытка<select id="result-selection" aria-label="Результат тренировки"></select></label></div><div id="workout-result"></div></article>
+      </section>
+      <section id="statistics" class="view" hidden>
+        <div class="page-heading"><div><div class="eyebrow">СТАТИСТИКА ПО ЯЗЫКУ</div><h1>Прогресс в деталях<span>.</span></h1><p id="statistics-context">Только выбранный язык и профиль раскладки.</p></div><div class="statistics-filters"><label>Период<select id="stats-period"><option value="30">30 дней</option><option value="7">7 дней</option><option value="all">Всё время</option></select></label><label>Режим<select id="stats-mode"><option value="all">Все режимы</option><option value="time">Time</option><option value="words">Words</option><option value="custom">Custom</option><option value="quote">Quote</option></select></label></div></div>
+        <div id="detailed-metrics" class="stats-grid"></div>
+        <article class="panel"><div class="panel-heading"><h2>Динамика результатов</h2><label class="select-label">Показатель<select id="stats-chart-metric"><option value="wpm">Скорость, WPM</option><option value="accuracy">Точность, %</option></select></label></div><div id="stats-chart" class="chart"></div><p class="chart-caption">До 24 последних завершённых тестов в выбранном периоде. WPM — оценка Keyloom.</p></article>
+        <article class="panel activity-panel"><div class="panel-heading"><div><h2>Ритм практики</h2><p>Последние 8 недель · дни по местному времени · выбранный язык, все режимы</p></div><span id="streak-detail" class="pill"></span></div><div id="activity-calendar" class="activity-calendar"></div></article>
+        <article class="panel detail-panel"><div class="panel-heading"><div><h2>Буквы, связки и слова</h2><p>Ошибки первого ввода; исправления не скрывают опечатки.</p></div></div><div class="detail-controls"><select id="detail-group" aria-label="Детальная статистика"><option value="pairs">Связки</option><option value="chars">Буквы</option><option value="words">Слова</option></select><input id="detail-search" placeholder="Найти букву, связку или слово" aria-label="Поиск по статистике"><select id="detail-sort" aria-label="Сортировка статистики"><option value="score">По приоритету</option><option value="errorRate">По доле ошибок</option><option value="ms">По задержке</option><option value="attempts">По числу попыток</option></select></div><div id="detail-table" class="history-scroll"></div><div class="detail-pagination"><button id="detail-prev" class="text-button">← Назад</button><span id="detail-page"></span><button id="detail-next" class="text-button">Далее →</button></div></article>
+        <p class="muted">Все показатели рассчитаны по сохранённой истории (до 160 сессий). Изменение скорости: последние 5 тестов против предыдущих 5, без тестов короче 5 секунд. Разный режим и сложность текста могут влиять на сравнение. «Потренировано» означает практику связки, а не подтверждённое освоение.</p>
+      </section>
+      <section id="history" class="view" hidden><div class="page-heading"><div><div class="eyebrow">ИСТОРИЯ ПРАКТИКИ</div><h1>Всё начинается с попытки<span>.</span></h1><p>Последние 160 сессий. Прерванные тесты не влияют на рекомендации.</p></div></div><article class="panel" id="history-list"></article></section>
+      <section id="settings" class="view" hidden><div class="page-heading"><div><div class="eyebrow">ТВОЁ ПРОСТРАНСТВО</div><h1>Практика под тебя<span>.</span></h1><p>Без аккаунта, API-ключей и облачной синхронизации.</p></div></div>
+        <article class="panel settings-panel"><h2>Сбор данных</h2><label class="setting-row"><span><strong>Записывать тесты Monkeytype</strong><small>Только поле печати на monkeytype.com. После изменения начни новый тест.</small></span><input type="checkbox" id="capture-enabled" role="switch"></label><label class="setting-row"><span><strong>Профиль раскладки</strong><small>Выбирается вручную. Данные двух профилей не смешиваются.</small></span><select id="layout"><option value="default">Основная</option><option value="alternate">Альтернативная</option></select></label></article>
+        <article class="panel settings-panel"><h2>Твои данные</h2><p class="muted">Сохраняем до 160 последних сессий в пределах 6 МБ: статистику букв, сочетаний и слов. Полный текст теста и журнал ввода не сохраняются. При удалении расширения локальные данные будут потеряны — сделай экспорт.</p><div class="exercise-actions"><button class="secondary" id="export">Экспорт JSON</button><label class="secondary file-button" tabindex="0">Импорт JSON<input id="import" type="file" accept="application/json,.json"></label></div><p class="muted">Импорт объединяет историю без дублей. Текущие настройки записи остаются прежними.</p></article>
+        <article class="panel settings-panel"><h2>Первая версия</h2><p class="muted">Поддерживаются обычные тесты словами на русском и английском: time, words, custom. Используй стандартный режим без funbox, пунктуации, цифр, IME, stop-on-error и автоматических исправлений. Неподдерживаемый текст пропускается. Для смены языка используй переключатель вверху.</p><a class="text-link" href="dashboard.html?demo=1">Посмотреть интерфейс на демоданных →</a></article>
+      </section>
+      <footer class="page-footer"><span>Чуть увереннее, чем вчера.</span><span>Сделано для твоего ритма <span class="footer-spark">✳</span></span></footer>
+    </div>
+  </main>
+  <div id="toast" role="status" class="toast" hidden></div>
+</body>
+</html>

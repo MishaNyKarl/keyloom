@@ -1,0 +1,105 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import { readFile } from 'node:fs/promises';
+import { webcrypto } from 'node:crypto';
+
+// Executes the actual content script; only DOM and Chrome transport are simulated.
+async function harness(training=null) {
+  const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
+  const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
+  const callbacks = {}, frames = [], saves = [];
+  let observer, first, clock = 0, wordIndex=0, target='street';
+  const messages=[];
+  const element = () => ({ shown:true, style:{},textContent:'',
+    closest(selector) { return selector === '.hidden' && !this.shown ? this : null; },
+    getClientRects() { return this.shown ? [1] : []; },
+    addEventListener(name,cb){this[name]=cb;},setAttribute(){},contains(){return false;} });
+  const typing = element(), result = element(), badge = element(); result.shown = false;
+  const input = {id:'wordsInput',value:' '};
+  const newWord = () => ({ getAttribute:()=> String(wordIndex), hasAttribute:()=>true,
+    querySelectorAll:()=>[...target].map(textContent=>({textContent})) });
+  first = newWord();
+  const root = {querySelector:()=>first};
+  const mode = {textContent:training?'custom':'words', getAttribute:()=>null};
+  const doc = {body:{append(){}},hidden:false,
+    addEventListener(name, cb) { callbacks[name]=cb; },
+    createElement:()=>badge,
+    querySelector(selector) { return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':first})[selector] ?? null; },
+    querySelectorAll:()=>[mode],
+  };
+  const context = vm.createContext({document:doc, location:{pathname:'/'}, crypto:webcrypto, performance:{now:()=>clock+=100},
+    getComputedStyle:()=>({visibility:'visible'}),requestAnimationFrame:cb=>frames.push(cb),
+    MutationObserver:class {constructor(cb){observer=cb;}observe(){}},
+    KeyloomConfiguration:{selected:()=>true,read:()=>({ok:true})},
+    chrome:{runtime:{async sendMessage(message){
+      messages.push(message);
+      if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training};
+      if(message.type==='SAVE_SESSION'){saves.push(message.session);return {ok:true,saved:true};}
+      return {ok:true};
+    }},storage:{onChanged:{addListener(){}}}},
+  });
+  vm.runInContext(core,context); vm.runInContext(source,context);
+  // Cross-realm async transport needs a full microtask drain before typing.
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
+  const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
+  return {typing,result,badge,input,saves,type,changed,context,messages,
+    nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
+    async clickBadge(){badge.click();await settle();},
+    replaceWord(){first=newWord();input.value=' ';},
+    async clickRestart(){callbacks.click({target:{closest:()=>true}});await settle();},
+  };
+}
+test('normal completion survives the interval where both panels are hidden',async()=>{
+  const h=await harness();h.type('street');h.typing.shown=false;
+  for(let i=0;i<20;i++) await h.changed();
+  assert.equal(h.saves.length,0); assert.match(h.badge.textContent,/Ожидаю результаты/);
+  h.result.shown=true;await h.changed();await h.changed();
+  assert.equal(h.saves.length,1);assert.equal(h.saves[0].status,'completed');
+});
+test('word DOM replacement during the hidden transition is not a restart',async()=>{
+  const h=await harness();h.type('street');h.typing.shown=false;h.replaceWord();await h.changed();
+  assert.equal(h.saves.length,0);
+  h.result.shown=true;await h.changed();assert.equal(h.saves[0].status,'completed');
+});
+test('a new ready test with replaced words still abandons the old test',async()=>{
+  const h=await harness();h.type('str');h.replaceWord();await h.changed();
+  assert.equal(h.saves.length,1);assert.equal(h.saves[0].status,'abandoned');
+});
+test('explicit restart while typing remains abandoned',async()=>{
+  const h=await harness();h.type('str');await h.clickRestart();
+  assert.equal(h.saves[0].status,'abandoned');
+});
+test('restart click after results become visible preserves completed status',async()=>{
+  const h=await harness();h.type('street');h.typing.shown=false;h.result.shown=true;
+  await h.clickRestart();await h.changed();assert.equal(h.saves.length,1);assert.equal(h.saves[0].status,'completed');
+});
+test('navigation away is distinct from a transition within the test page',async()=>{
+  const h=await harness();h.type('str');h.typing.shown=false;h.context.location.pathname='/settings';await h.changed();
+  assert.equal(h.saves[0].status,'abandoned');
+});
+test('completion of a timed test does not require typing the whole last word',async()=>{
+  const h=await harness();h.type('str');h.typing.shown=false;await h.changed();
+  h.result.shown=true;await h.changed();assert.equal(h.saves[0].status,'completed');
+});
+
+test('linked completion retains its exercise and badge opens that exact saved result',async()=>{
+ const training={id:'exercise-one',words:Array(10).fill('street'),language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
+ const h=await harness(training);
+ for(let i=0;i<10;i++){h.nextWord(i);h.type('street');}
+ h.typing.shown=false;h.result.shown=true;await h.changed();
+ assert.equal(h.saves[0].training.id,training.id);
+ await h.clickBadge();assert.equal(h.messages.at(-1).type,'OPEN_DASHBOARD');assert.equal(h.messages.at(-1).sessionId,h.saves[0].id);
+});
+test('changed custom words cannot be credited to the linked exercise',async()=>{
+ const training={id:'exercise-one',words:Array(10).fill('street'),language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
+ const h=await harness(training);h.type('street');h.nextWord(9,'strong');h.type('strong');
+ h.typing.shown=false;h.result.shown=true;await h.changed();assert.equal(h.saves[0].training,undefined);
+});
+test('shortened custom test is saved but not credited as the full exercise',async()=>{
+ const training={id:'exercise-one',words:Array(10).fill('street'),language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
+ const h=await harness(training);h.type('street');h.typing.shown=false;h.result.shown=true;await h.changed();
+ assert.equal(h.saves[0].status,'completed');assert.equal(h.saves[0].training,undefined);
+});
