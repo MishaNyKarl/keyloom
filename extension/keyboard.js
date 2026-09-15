@@ -1,21 +1,29 @@
 (() => {
   function create({commands, canOpen = () => true, theme, escape = false, hidePointer = false}) {
     let dialog, input, list, error, previousFocus, busy = false, pointerTimer;
+    let menuCommands = [];
     const ready = () => canOpen() && !document.querySelector('dialog[open]:not(#keyloom-command-menu)');
     const available = () => commands.filter(command => !command.available || command.available());
     const stop = event => { event.preventDefault(); event.stopImmediatePropagation(); };
     function render() {
       const query = input.value.trim().toLowerCase();
-      const matches = available().filter(command =>
-        (command.label + ' ' + (command.alias ?? '')).toLowerCase().includes(query));
+      const numeric = /^\d+$/.test(query);
+      const matches = menuCommands.filter(({command, number}) => {
+        if (command.available && !command.available()) return false;
+        if (numeric) return number === Number(query);
+        return (command.label + ' ' + (command.alias ?? '')).toLowerCase().includes(query);
+      });
       list.replaceChildren();
-      for (const command of matches) {
+      for (const {command, number} of matches) {
         const button = document.createElement('button');
         button.type = 'button';
+        const ordinal = document.createElement('span');
+        ordinal.className = 'keyloom-command-number';
+        ordinal.textContent = String(number);
         const label = document.createElement('span');
         label.className = 'keyloom-command-label';
         label.textContent = command.label;
-        button.append(label);
+        button.append(ordinal, label);
         if (command.key) {
           const hint = document.createElement('kbd');
           hint.textContent = 'Alt+' + command.key.slice(3);
@@ -29,7 +37,7 @@
         empty.textContent = 'Команды не найдены';
         list.append(empty);
       }
-      return matches;
+      return matches.map(entry => entry.command);
     }
     async function run(command) {
       if (busy || !ready() || (command.available && !command.available())) return;
@@ -57,7 +65,7 @@
         close.addEventListener('click', () => dialog.close());
         input = document.createElement('input');
         input.type = 'search';
-        input.placeholder = 'Найти команду…';
+        input.placeholder = 'Название или номер команды…';
         input.setAttribute('aria-label', 'Найти команду Keyloom');
         heading.append(input, close);
         list = document.createElement('div');
@@ -99,6 +107,7 @@
         previousFocus = document.activeElement;
         dialog.showModal();
       }
+      menuCommands = available().map((command, index) => ({command, number:index + 1}));
       input.value = '';
       error.textContent = '';
       render();

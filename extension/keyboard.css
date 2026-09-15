@@ -89,13 +89,10 @@
   font-size: .75rem;
   line-height: .75rem;
 }
-.keyloom-command-list button::before {
-  content: '';
-  width: .75rem;
-  height: .75rem;
-  flex: 0 0 .75rem;
-  background: currentColor;
-  mask: url('icons/lucide/command.svg') center / contain no-repeat;
+.keyloom-command-number {
+  flex: 0 0 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 #keyloom-command-menu button:hover,
 #keyloom-command-menu button:focus-visible,

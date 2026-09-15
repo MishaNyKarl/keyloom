@@ -134,3 +134,38 @@ test('palette text input stays editable without leaking events to host shortcuts
     assert.equal(event.prevented, undefined);
   }
 });
+
+test('command numbers remain stable during search and Enter runs an exact number', async () => {
+  const calls = [];
+  const h = harness({commands:Array.from({length:12}, (_, index) => ({
+    label:'Command ' + (index + 1), run:() => calls.push(index + 1)
+  }))});
+  h.menu.open();
+  const input = h.nodes.find(node => node.tag === 'input');
+  const dialog = h.nodes.find(node => node.tag === 'dialog');
+  const list = h.nodes.find(node => node.className === 'keyloom-command-list');
+  input.value = 'Command 12';
+  input.listeners.input();
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0].children[0].textContent, '12');
+  for (const query of ['0', '13', '999999999999999999999']) {
+    input.value = query;
+    input.listeners.input();
+    assert.equal(list.children[0].textContent, 'Команды не найдены');
+    dialog.listeners.keydown(h.event({key:'Enter'}));
+    assert.equal(calls.length, 0);
+  }
+  input.value = ' 2 ';
+  input.listeners.input();
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0].children[0].textContent, '2');
+  dialog.listeners.keydown(h.event({key:'Enter'}));
+  await settle();
+  assert.deepEqual(calls, [2]);
+  assert.equal(dialog.open, false);
+  h.menu.open();
+  input.value = '12';
+  dialog.listeners.keydown(h.event({key:'Enter'}));
+  await settle();
+  assert.deepEqual(calls, [2, 12]);
+});
