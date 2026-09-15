@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
 // Executes the actual content script; only DOM and Chrome transport are simulated.
-async function harness(training=null, firefox=false, daily=null) {
+async function harness(training=null, firefox=false, daily=null, today=null) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
@@ -38,7 +38,7 @@ async function harness(training=null, firefox=false, daily=null) {
     KeyloomConfiguration:{selected:()=>true,read:()=>({ok:true})},
     chrome:{runtime:{async sendMessage(message){
       messages.push(message);
-      if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training};
+      if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training,today};
       if(message.type==='SAVE_SESSION'){saves.push(message.session);return {ok:true,saved:true,daily};}
       return {ok:true};
     }},storage:{onChanged:{addListener(callback){storageListener=callback;}}}},
@@ -233,4 +233,14 @@ test('persistent controls stay separate from privacy and become inert during typ
   h.result.shown = true;
   await h.changed();
   assert.equal(widget.inert, false);
+});
+
+test('today plan badge shows counts and estimated minutes without a linked test', async () => {
+  const h = await harness(null, false, null, {done:3,total:12,minutes:8});
+  const badge = h.created.find(node => node.id === 'keyloom-progress');
+  assert.equal(badge.hidden, false);
+  assert.match(badge.textContent, /3 \/ 12 заданий/);
+  assert.match(badge.textContent, /≈ 8 мин/);
+  const empty = await harness();
+  assert.equal(empty.created.find(node => node.id === 'keyloom-progress').hidden, true);
 });

@@ -8,6 +8,7 @@
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
   let dailyState = null, nextButton, comparisonNote, panel, widget, theme = 'dark', advancing = false;
+  let todayProgress = null, progressPanel;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -48,11 +49,22 @@
       widget.setAttribute('aria-label', 'Keyloom — результаты и команды');
       widget.append(panel);
       document.body.append(widget);
+      progressPanel = document.createElement('div');
+      progressPanel.id = 'keyloom-progress';
+      progressPanel.setAttribute('role', 'status');
+      progressPanel.setAttribute('aria-live', 'polite');
+      document.body.append(progressPanel);
     }
     if (widget.isConnected === false) document.body.append(widget);
+    if (progressPanel.isConnected === false) document.body.append(progressPanel);
     widget.setAttribute('data-typing', String(Boolean(session)));
     widget.inert = Boolean(session);
     widget.setAttribute('data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
+    progressPanel.setAttribute('data-keyloom-theme', theme);
+    progressPanel.hidden = !todayProgress;
+    const progressText = todayProgress ?
+      todayProgress.done + ' / ' + todayProgress.total + ' заданий    ≈ ' + todayProgress.minutes + ' мин осталось' : '';
+    if (progressPanel.textContent !== progressText) progressPanel.textContent = progressText;
     panel.setAttribute('data-typing', String(Boolean(session)));
     panel.inert = Boolean(session);
     const label = `Keyloom: ${settings.enabled ? status : 'На паузе'}`;
@@ -184,6 +196,7 @@
   }
   document.addEventListener('beforeinput', capture, true);
   document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void refreshProgress();
     if (document.hidden && session) {
       const last = session.events.at(-1);
       session.events.push({ ...last, type: 'break', time: performance.now() });
@@ -227,11 +240,22 @@
     settings = state.settings;
     trainingPlan = state.training ?? null;
     dailyState = state.daily ?? null;
+    todayProgress = state.today ?? null;
     if (dailyState?.completed) status = 'Ежедневный план завершён!';
     paint();
   }).catch(() => {});
+  async function refreshProgress() {
+    try {
+      const reply = await send({type:'GET_TODAY_PROGRESS'});
+      todayProgress = reply.today ?? null;
+      paint();
+    } catch {
+      // send() already displays the connection error in the status panel.
+    }
+  }
   extensionApi.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (changes.dailies || changes.settings) void refreshProgress();
     if (changes.theme) { theme = changes.theme.newValue; paint(); }
     if (!changes.settings) return;
     settings = changes.settings.newValue;

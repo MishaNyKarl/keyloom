@@ -197,5 +197,12 @@
         beforeAccuracy:before.result.accuracy, afterAccuracy:after.result.accuracy}];
     });
   }
-  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons});
+  function todaySummary(plans, layout, now = Date.now()) {
+    const plan = plans.filter(row => row.day === KeyloomAnalytics.day(now) && row.layout === layout).at(-1);
+    if (!plan) return null;
+    const remaining = plan.steps.filter(step => !step.result);
+    return {done:plan.steps.length - remaining.length, total:plan.steps.length,
+      minutes:Math.ceil(remaining.reduce((sum, step) => sum + step.seconds, 0) / 60)};
+  }
+  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons, todaySummary});
 })();

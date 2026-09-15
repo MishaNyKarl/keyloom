@@ -56,12 +56,15 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       dailies = [], dailyPrefs, theme } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs', 'theme']);
     const learning = savedLearning ?? KeyloomLearning.ingest(null, sessions);
     if (!savedLearning) await extensionApi.storage.local.set({learning});
+    if (message.type === 'GET_TODAY_PROGRESS') {
+      return {today:KeyloomDaily.todaySummary(dailies, settings.layout)};
+    }
     if (message.type === 'GET_STATE') {
       const id=fromMonkeytype?new URL(sender.url).searchParams.get('keyloomExercise'):null;
       const { syncConfig, syncStatus } = fromExtension
         ? await extensionApi.storage.local.get(['syncConfig', 'syncStatus']) : {};
       const sync = { enabled: Boolean(syncConfig?.enabled), url: syncConfig?.url ?? '', ...syncStatus };
-      return { theme, sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null, daily:dailyContinuation(dailies, sender.url)}) };
+      return { theme, today:KeyloomDaily.todaySummary(dailies, settings.layout), sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null, daily:dailyContinuation(dailies, sender.url)}) };
     }
     if (message.type === 'SAVE_SESSION' && fromMonkeytype) {
       if (!settings.enabled) return { ignored: true };

@@ -301,3 +301,30 @@ for (const firefox of [false, true]) {
     assert.equal(await h.send({type:'RESUME_TODAY'},'https://example.com/'), undefined);
   });
 }
+
+test('today progress exposes only counts and estimated unfinished minutes', async () => {
+  const h = await harness();
+  const page = 'chrome-extension://test-extension/dashboard.html';
+  assert.equal((await h.send({type:'GET_TODAY_PROGRESS'})).today, null);
+  await h.send({type:'CREATE_DAILY', options:{minutes:5,languages:'both'}}, page);
+  const plan = h.storage.dailies[0];
+  let reply = await h.send({type:'GET_TODAY_PROGRESS'});
+  assert.deepEqual(Object.keys(reply.today).sort(), ['done','minutes','total']);
+  assert.equal(reply.today.done, 0);
+  assert.equal(reply.today.total, plan.steps.length);
+  assert.equal(reply.today.minutes, 5);
+  plan.steps[0].result = {id:'done', duration:90};
+  reply = await h.send({type:'GET_TODAY_PROGRESS'});
+  assert.equal(reply.today.done, 1);
+  assert.equal(reply.today.minutes, Math.ceil(plan.steps.slice(1).reduce((sum, step) => sum + step.seconds, 0) / 60));
+  for (const step of plan.steps) step.result = {id:'done'};
+  reply = await h.send({type:'GET_TODAY_PROGRESS'});
+  assert.equal(reply.today.done, reply.today.total);
+  assert.equal(reply.today.minutes, 0);
+  plan.day--;
+  assert.equal((await h.send({type:'GET_TODAY_PROGRESS'})).today, null);
+  plan.day++;
+  h.storage.settings.layout = 'alternate';
+  assert.equal((await h.send({type:'GET_TODAY_PROGRESS'})).today, null);
+  assert.equal(await h.send({type:'GET_TODAY_PROGRESS'},'https://example.com/'), undefined);
+});
