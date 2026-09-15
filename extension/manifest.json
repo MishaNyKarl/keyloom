@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keyloom — персональные тренировки печати",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "Персональные тренировки по ошибкам Monkeytype. Локальная статистика и синхронизация с личным сервером.",
   "permissions": [
     "storage",
