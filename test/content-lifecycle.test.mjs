@@ -45,7 +45,7 @@ async function harness(training=null) {
   await settle();
   const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
-  return {typing,result,badge,input,saves,type,changed,context,messages,
+  return {typing,result,badge,input,saves,type,changed,context,messages,mode,
     nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
     async clickBadge(){badge.click();await settle();},
     replaceWord(){first=newWord();input.value=' ';},
@@ -86,20 +86,38 @@ test('completion of a timed test does not require typing the whole last word',as
 });
 
 test('linked completion retains its exercise and badge opens that exact saved result',async()=>{
- const training={id:'exercise-one',words:Array(10).fill('street'),language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
+ const training={id:'exercise-one',words:Array(10).fill('street'),wordCount:10,language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
  const h=await harness(training);
  for(let i=0;i<10;i++){h.nextWord(i);h.type('street');}
  h.typing.shown=false;h.result.shown=true;await h.changed();
  assert.equal(h.saves[0].training.id,training.id);
+ assert.equal(h.saves[0].training.wordCount,10);
  await h.clickBadge();assert.equal(h.messages.at(-1).type,'OPEN_DASHBOARD');assert.equal(h.messages.at(-1).sessionId,h.saves[0].id);
 });
 test('changed custom words cannot be credited to the linked exercise',async()=>{
- const training={id:'exercise-one',words:Array(10).fill('street'),language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
+ const training={id:'exercise-one',words:Array(10).fill('street'),wordCount:10,language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
  const h=await harness(training);h.type('street');h.nextWord(9,'strong');h.type('strong');
  h.typing.shown=false;h.result.shown=true;await h.changed();assert.equal(h.saves[0].training,undefined);
 });
 test('shortened custom test is saved but not credited as the full exercise',async()=>{
- const training={id:'exercise-one',words:Array(10).fill('street'),language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
+ const training={id:'exercise-one',words:Array(10).fill('street'),wordCount:10,language:'english',layout:'default',kind:'pairs',targets:['st'],seconds:60};
  const h=await harness(training);h.type('street');h.typing.shown=false;h.result.shown=true;await h.changed();
  assert.equal(h.saves[0].status,'completed');assert.equal(h.saves[0].training,undefined);
+});
+
+test('quote capture accepts capitalized words, digits and punctuation through normal completion', async () => {
+  const h = await harness();
+  h.mode.textContent = 'quote';
+  h.nextWord(0, 'Привет,'); h.type('Привет,');
+  h.nextWord(1, '2026!'); h.type('2026!');
+  h.typing.shown = false; h.result.shown = true;
+  await h.changed();
+  assert.equal(h.saves.length, 1);
+  assert.equal(h.saves[0].status, 'completed');
+  assert.equal(h.saves[0].mode, 'quote');
+  assert.equal(h.saves[0].language, 'russian');
+  assert.equal(h.saves[0].uppercase.П.attempts, 1);
+  assert.equal(h.saves[0].digits['2'].attempts, 2);
+  assert.equal(h.saves[0].punctuation[','].attempts, 1);
+  assert.equal(h.saves[0].punctuation['!'].attempts, 1);
 });

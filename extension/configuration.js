@@ -33,13 +33,9 @@
       // Tags, PB/average indicators, pace caret and saving notices are informational.
       // Unknown notice text is not evidence of an unsupported modifier.
     }
-    for (const button of buttons) {
-      if (!button.selected) continue;
-      const text = label(button.text);
-      if (text === 'punctuation') return { ok: false, reason: 'Отключите punctuation' };
-      if (text === 'numbers') return { ok: false, reason: 'Отключите numbers' };
-    }
-    return { ok: true };
+    const languageNotice = notices.find(item => item.icons?.includes('fa-globe-americas'));
+    const language = languageNotice ? label(languageNotice.text).match(/^(english|russian)/)?.[1] : undefined;
+    return { ok: true, language };
   }
   function read(doc) {
     const root = doc.querySelector('mount[data-component="testmodesnotice"]');

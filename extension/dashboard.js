@@ -57,7 +57,11 @@
     chips($('focus-chips'), focus.map(row => row.key));
     renderChart(); renderWeaknesses(); renderKeyboard(); renderHistory();
     $('practice-language').value=$('language').value;
-    if(!exercise||exercise.language!==$('language').value||exercise.layout!==state.settings.layout)makeExercise();
+    if (!exercise || exercise.language !== $('language').value || exercise.layout !== state.settings.layout) {
+      $('practice-kind').value = currentCustom().kind ?? 'pairs';
+      if (currentCustom().seconds) $('practice-duration').value = String(currentCustom().seconds);
+      makeExercise();
+    }
     renderInsights(); renderResults(); renderStatistics();
   }
   function chips(container, values) {
@@ -116,14 +120,14 @@
   function renderWeaknesses() {
     const rows = currentProfile[group].filter(r => r.reliable).slice(0, 5);
     if (!rows.length) return empty($('weakness-table'), 'Пока собираем наблюдения', 'Несколько тестов помогут отличить случайность от закономерности.');
-    const el = table([group === 'pairs' ? 'СОЧЕТАНИЕ' : 'СЛОВО', 'ОШИБКИ', 'ИНТЕРВАЛ, МС', 'ПОПЫТОК', '']);
+    const el = table([group === 'words' ? 'СЛОВО' : 'СОЧЕТАНИЕ', 'ОШИБКИ', 'ИНТЕРВАЛ, МС', 'ПОПЫТОК', '']);
     rows.forEach(item => {
       const row = el.tBodies[0].insertRow(); cell(row, item.key, 'pair-key'); cell(row, `${format(item.errorRate * 100)}%`, 'error-value');
       const timing = cell(row, item.timings.length >= 3 ? format(item.ms) : '—', 'timing');
       timing.title = `Медиана интервала между буквами в чистом вводе. ${item.timings.length} измерений. Длинные паузы и исправления исключены.`;
       cell(row, format(item.attempts), 'timing');
       const button = document.createElement('button'); button.className = 'row-train'; button.textContent = '↗'; button.title = `Тренировать ${item.key}`; button.setAttribute('aria-label', button.title);
-      button.addEventListener('click', () => { selectedFocus = item.key; $('practice-kind').value=group; makeExercise(); showView('practice'); });
+      button.addEventListener('click', () => { selectedFocus = item.key; $('practice-kind').value=group; customProfiles.set(customKey(), {...currentCustom(), source: 'manual', targets: [item.key], kind: group}); makeExercise(); showView('practice'); });
       cell(row, '').append(button);
     });
     $('weakness-table').replaceChildren(el);
@@ -155,14 +159,62 @@
     });
     const wrapper = document.createElement('div'); wrapper.className = 'history-scroll'; wrapper.append(el); $('history-list').replaceChildren(wrapper);
   }
+  const practiceOptions = KeyloomPracticeOptions;
+  const customProfiles = new Map();
+  function customKey() {
+    return $('language').value + ':' + state.settings.layout;
+  }
+  function defaultCustom() {
+    return { source: 'auto', targets: [], ratio: .75, wordCount: null, highlight: true };
+  }
+  function currentCustom() {
+    return customProfiles.get(customKey()) ?? defaultCustom();
+  }
+  function renderExerciseText() {
+    const box = $('exercise-text');
+    box.replaceChildren();
+    exercise.words.forEach((word, index) => {
+      if (index) box.append(document.createTextNode(' '));
+      const span = document.createElement('span');
+      span.className = 'preview-word';
+      const targets = currentCustom().highlight ? exercise.targets : [];
+      for (const part of practiceOptions.segments(word, targets, exercise.kind)) {
+        const node = document.createElement(part.highlight ? 'mark' : 'span');
+        node.textContent = part.text;
+        span.append(node);
+      }
+      box.append(span);
+    });
+    $('exercise-label').textContent = currentCustom().highlight && exercise.targets.length
+      ? 'ТЕКСТ ТРЕНИРОВКИ · ЦЕЛИ ВЫДЕЛЕНЫ ЦВЕТОМ' : 'ТЕКСТ ТРЕНИРОВКИ';
+  }
+  function practiceExtras() {
+    return {
+      uppercase: $('extra-uppercase').checked,
+      digits: $('extra-digits').checked,
+      punctuation: $('extra-punctuation').checked
+    };
+  }
   function makeExercise() {
-    exercise = analytics.plan(state.sessions, KeyloomWords[$('language').value], {language:$('language').value,layout:state.settings.layout,seconds:Number($('practice-duration').value),kind:$('practice-kind').value,focus:selectedFocus});
+    exercise = analytics.plan(state.sessions, KeyloomWords[$('language').value], {language:$('language').value,layout:state.settings.layout,seconds:Number($('practice-duration').value),kind:$('practice-kind').value,focus:selectedFocus,manualTargets:currentCustom().source==='manual'?currentCustom().targets:[],ratio:currentCustom().ratio,wordCount:currentCustom().wordCount,extras:practiceExtras()});
     $('exercise-title').textContent = exercise.reason;
-    $('exercise-reason').textContent = exercise.kind==='mixed'?'Обычные слова для разнообразной практики и пополнения статистики.':exercise.targeted ? 'Три слова из четырёх подбираются по выбранным слабым местам. Остальные помогают сохранить естественный ритм.' : 'Пока недостаточно наблюдений для персональных рекомендаций. Начни с обычных слов — профиль сформируется по твоим результатам.';
+    const specialMode = ['uppercase', 'digits', 'punctuation'].includes(exercise.kind);
+    $('custom-ratio').disabled = specialMode;
+    $('symbols-note').textContent = ['digits', 'punctuation'].includes(exercise.kind)
+      ? 'Цифры и знаки: цели и средняя скорость берутся из обоих языков. Язык влияет только на буквенные упражнения.'
+      : 'Заглавные — в выбранном языке. Цифры и знаки — общая статистика для всех языков.';
+    $('exercise-reason').textContent = exercise.kind==='mixed'?'Обычные слова для разнообразной практики и пополнения статистики.':exercise.targeted ? 'Не меньше ' + Math.round(exercise.ratio * 100) + '% слов направлены на выбранные цели. ' + (exercise.ratio === 1 ? 'Только целевая практика.' : 'Остальные добавляют разнообразие.') : 'Пока недостаточно наблюдений для персональных рекомендаций. Начни с обычных слов — профиль сформируется по твоим результатам.';
+    if (specialMode) {
+      $('exercise-reason').textContent = 'Каждый фрагмент содержит цель выбранной категории. Чекбоксы позволяют добавить другие символы.';
+    }
     chips($('exercise-focus'), exercise.targets);
-    $('exercise-text').value = exercise.words.join(' ');
+    renderExerciseText();
     document.querySelector('.exercise .pill').textContent=`${exercise.words.length} слов · ≈ ${format(exercise.estimatedSeconds)} с`;
     $('duration-explanation').textContent=exercise.calibrating?'Пока нет измеренной скорости: расчёт по 40 WPM. После первых тестов оценка станет персональной.':`Расчёт по средней скорости последних 20 подходящих тестов: ${format(exercise.wpm,1)} WPM. Это оценка длительности, тест заканчивается после всех слов.`;
+    $('practice-duration').disabled = exercise.wordCount !== null;
+    if (exercise.wordCount !== null) {
+      $('duration-explanation').textContent = 'Объём задан вручную: ' + exercise.wordCount + ' слов. Изменить его можно в настройках ⚙. ' + $('duration-explanation').textContent;
+    }
     const meta=document.querySelector('.practice-meta');meta.replaceChildren();for(const text of [`${exercise.words.length} слов`,`≈ ${format(exercise.estimatedSeconds)} с`]){const span=document.createElement('span');span.textContent=text;meta.append(span);}
   }
   const signed=(value,digits=1)=>value===null?'—':`${value>0?'+':''}${format(value,digits)}`;
@@ -173,7 +225,7 @@
     metricCards($('practice-progress'),[
       ['Серия дней',format(s.streak),'дн.',`Лучшая серия: ${s.best} · по выбранному языку`],
       ['Изменение скорости',signed(s.growth?.wpm??null),'WPM',s.growth?`${signed(s.growth.percent)}% · последние 5 против предыдущих 5`:'Нужно 10 тестов длительнее 5 секунд'],
-      ['Связок потренировано',format(s.practiced),'', 'Уникальные цели завершённых упражнений'],
+      ['Пар и связок потренировано',format(s.practiced),'', 'Уникальные цели завершённых упражнений'],
       ['Дней с практикой',format(s.activeDays),'дн.','По сохранённым завершённым тестам'],
     ]);
   }
@@ -197,19 +249,23 @@
     const title=document.createElement('p');title.className='result-caption';title.textContent=`${s.status==='completed'?'Тренировка завершена':'Тест прерван'} · ${new Date(s.date).toLocaleString('ru-RU')} · ${s.language==='russian'?'Русский':'English'}${s.training?'':' · тест без привязки к упражнению'}`;box.append(title);
     const cards=document.createElement('div');cards.className='stats-grid result-cards';
     const errors=Object.values(s.chars).reduce((sum,r)=>sum+r.errors,0);
-    metricCards(cards,[['Скорость',format(s.wpm,1),'WPM','Оценка по событиям ввода'],['Точность',format(s.accuracy,1),'%','С учётом исправленных опечаток'],['Длительность',format(s.duration,1),'с',s.training?`План: примерно ${s.training.seconds} с`:'От первого до последнего события'],['Ошибки / исправления',`${errors} / ${s.corrections}`,'','Буквы первого ввода / удаления']]);box.append(cards);
+    metricCards(cards,[['Скорость',format(s.wpm,1),'WPM','Оценка по событиям ввода'],['Точность',format(s.accuracy,1),'%','С учётом исправленных опечаток'],['Длительность',format(s.duration,1),'с',s.training?(s.training.wordCount ? `План: ${s.training.wordCount} слов` : `План: примерно ${s.training.seconds} с`):'От первого до последнего события'],['Ошибки / исправления',`${errors} / ${s.corrections}`,'','Ошибки первого ввода / удаления']]);box.append(cards);
     const targets=s.training?.targets??[];
     if(targets.length){
       const before=core.profile(state.sessions.filter(x=>x.date<s.date),{language:s.language,layout:s.layout});
       const el=table(['ЦЕЛЬ','ПОПЫТКИ','ОШИБКИ','ИНТЕРВАЛ','К ПРЕЖНЕМУ']);
-      targets.forEach(key=>{const group=s.training.kind==='words'?'words':'pairs';const stat=s[group][key];const baseline=before[group].find(r=>r.key===key);const ms=stat?.timings.length>=3?core.median(stat.timings):null;const row=el.tBodies[0].insertRow();cell(row,key,'pair-key');cell(row,String(stat?.attempts??0));cell(row,stat?`${stat.errors} (${format(stat.errors/stat.attempts*100)}%)`:'—');cell(row,ms===null?'Мало данных':`${format(ms)} мс`);cell(row,ms!==null&&baseline?.timings.length>=3?`${signed(ms-baseline.ms)} мс`:'—');});
+      targets.forEach(key=>{const group=s.training.kind;const stat=s[group]?.[key];const baseline=before[group].find(r=>r.key===key);const ms=stat?.timings.length>=3?core.median(stat.timings):null;const row=el.tBodies[0].insertRow();cell(row,key,'pair-key');cell(row,String(stat?.attempts??0));cell(row,stat?`${stat.errors} (${format(stat.errors/stat.attempts*100)}%)`:'—');cell(row,ms===null?'Мало данных':`${format(ms)} мс`);cell(row,ms!==null&&baseline?.timings.length>=3?`${signed(ms-baseline.ms)} мс`:'—');});
       const scroll=document.createElement('div');scroll.className='history-scroll';scroll.append(el);box.append(scroll);
     }
-    const note=document.createElement('p');note.className='muted result-caption';note.textContent=targets.length?'Интервалы сравниваются с предыдущей историей этого языка и раскладки. Минус — быстрее. Нужно хотя бы 3 чистых измерения с каждой стороны; один тест не доказывает освоение.':'Это общий результат теста. Для сравнения конкретных слабых мест выбери тренировку связок или слов.';box.append(note);
+    const note=document.createElement('p');note.className='muted result-caption';note.textContent=targets.length?(['digits', 'punctuation'].includes(s.training?.kind) ? 'Сравнение с предыдущей историей обоих языков в этой раскладке. ' : 'Сравнение с предыдущей историей этого языка и раскладки. ') + 'Минус — быстрее. Нужно хотя бы 3 чистых измерения с каждой стороны; один тест не доказывает освоение.':'Это общий результат теста. Для сравнения конкретных слабых мест выбери тренировку пар, связок или слов.';box.append(note);
   }
   function renderStatistics(){
     const s=analytics.summary(state.sessions,scope({days:$('stats-period').value,mode:$('stats-mode').value}));
-    detailProfile=core.profile(s.completed,scope());
+    const days = $('stats-period').value;
+    const cutoff = days === 'all' ? 0 : Date.now() - Number(days) * 86400000;
+    const selectedMode = $('stats-mode').value;
+    detailProfile = core.profile(state.sessions.filter(session => session.date >= cutoff &&
+      (selectedMode === 'all' || session.mode === selectedMode)), scope());
     $('statistics-context').textContent=`${$('language').value==='russian'?'Русский':'English'} · ${state.settings.layout==='default'?'основная':'альтернативная'} раскладка · ${s.completed.length} завершённых / ${s.selected.length-s.completed.length} прерванных`;
     metricCards($('detailed-metrics'),[
       ['Средняя скорость',format(s.mean,1),'WPM','Среднее завершённых тестов от 5 секунд'],['Лучшая скорость',format(s.bestWpm,1),'WPM','В выбранном периоде и режиме'],['Средняя точность',format(s.accuracy,1),'%','Взвешено по числу нажатий'],['Лучшая точность',format(s.bestAccuracy,1),'%','В выбранном периоде и режиме'],
@@ -217,10 +273,57 @@
     ]);
     renderChart($('stats-chart'),s.completed,$('stats-chart-metric').value);
     $('streak-detail').textContent=`Серия ${s.streak} · лучшая ${s.best}`;
-    $('activity-calendar').replaceChildren(...s.calendar.map(d=>{const square=document.createElement('div');square.className='activity-day';square.dataset.level=String(Math.min(3,d.count));const date=new Date(d.day*86400000).toLocaleDateString('ru-RU',{timeZone:'UTC',day:'numeric',month:'short'});square.title=`${date}: ${d.count} тестов`;square.setAttribute('aria-label',square.title);square.textContent=new Date(d.day*86400000).getUTCDate();return square;}));
+    renderCalendar(s.all);
+
     renderDetailTable();
   }
+  function renderCalendar(sessions) {
+    const weeks = practiceOptions.calendar(sessions);
+    const calendar = document.createElement('table');
+    calendar.className = 'week-calendar';
+    const caption = document.createElement('caption');
+    caption.textContent = 'Завершённые тесты по дням недели';
+    calendar.append(caption);
+    const head = calendar.createTHead().insertRow();
+    const corner = document.createElement('th');
+    corner.scope = 'col';
+    corner.textContent = 'День';
+    head.append(corner);
+    const dateLabel = day => new Date(day * 86400000).toLocaleDateString('ru-RU', {
+      timeZone: 'UTC', day: 'numeric', month: 'short'
+    });
+    for (const week of weeks) {
+      const heading = document.createElement('th');
+      heading.scope = 'col';
+      heading.textContent = dateLabel(week[0].day);
+      head.append(heading);
+    }
+    const body = calendar.createTBody();
+    ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].forEach((label, index) => {
+      const row = body.insertRow();
+      const heading = document.createElement('th');
+      heading.scope = 'row';
+      heading.textContent = label;
+      row.append(heading);
+      for (const week of weeks) {
+        const day = week[index];
+        const square = document.createElement('span');
+        square.className = 'activity-day';
+        square.dataset.level = String(Math.min(3, day.count));
+        square.classList.toggle('future', day.future);
+        square.classList.toggle('today', day.today);
+        square.title = dateLabel(day.day) + (day.future ? ': будущий день' : ': ' + day.count + ' тестов');
+        square.setAttribute('aria-label', square.title);
+        if (!day.future) square.tabIndex = 0;
+        row.insertCell().append(square);
+      }
+    });
+    $('activity-calendar').replaceChildren(calendar);
+  }
   function renderDetailTable(){
+    $('detail-scope').textContent = ['digits', 'punctuation'].includes($('detail-group').value)
+      ? 'Общие наблюдения из русского и английского тестов · выбранные период, режим и раскладка'
+      : 'Наблюдения выбранного языка, периода, режима и раскладки';
     const rows=(detailProfile?.[$('detail-group').value]??[]).filter(r=>r.key.includes($('detail-search').value.trim().toLowerCase())).slice();
     const sort=$('detail-sort').value;rows.sort((a,b)=>(b[sort]??-1)-(a[sort]??-1)||b.attempts-a.attempts);
     const pages=Math.max(1,Math.ceil(rows.length/20));detailPage=Math.min(detailPage,pages-1);
@@ -245,16 +348,34 @@
     document.querySelectorAll('[data-group]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); });
     renderWeaknesses();
   }));
-  function changeLanguage(value){$('language').value=value;selectedFocus=undefined;selectedSessionId=null;activeExerciseId=null;exercise=null;detailPage=0;render();}
+  function changeLanguage(value){$('language').value=value;selectedFocus=undefined;selectedSessionId=null;activeExerciseId=null;exercise=null;detailPage=0;$('practice-kind').value=currentCustom().kind??'pairs';render();}
   $('language').addEventListener('change',()=>changeLanguage($('language').value)); $('period').addEventListener('change', render);
   $('practice-language').addEventListener('change',()=>changeLanguage($('practice-language').value));
-  for(const id of ['practice-kind','practice-duration'])$(id).addEventListener('change',()=>{selectedFocus=undefined;makeExercise();});
+  for (const id of ['practice-kind', 'practice-duration']) {
+    $(id).addEventListener('change', () => {
+      selectedFocus = undefined;
+      const next = { ...currentCustom() };
+      if (id === 'practice-kind') {
+        next.source = 'auto';
+        next.targets = [];
+        next.kind = $('practice-kind').value;
+      } else {
+        next.wordCount = null;
+        next.seconds = Number($('practice-duration').value);
+      }
+      customProfiles.set(customKey(), next);
+      makeExercise();
+    });
+  }
   $('result-selection').addEventListener('change',()=>{selectedSessionId=$('result-selection').value||null;activeExerciseId=null;renderResults();});
   for(const id of ['stats-period','stats-mode','stats-chart-metric'])$(id).addEventListener('change',()=>{detailPage=0;renderStatistics();});
   for(const id of ['detail-group','detail-sort'])$(id).addEventListener('change',()=>{detailPage=0;renderDetailTable();});
   $('detail-search').addEventListener('input',()=>{detailPage=0;renderDetailTable();});
   $('detail-prev').addEventListener('click',()=>{detailPage--;renderDetailTable();});$('detail-next').addEventListener('click',()=>{detailPage++;renderDetailTable();});
   $('start-practice').addEventListener('click', () => { selectedFocus = undefined; makeExercise(); showView('practice'); });
+  for (const id of ['extra-uppercase', 'extra-digits', 'extra-punctuation']) {
+    $(id).addEventListener('change', makeExercise);
+  }
   $('regenerate').addEventListener('click', makeExercise);
   $('launch').addEventListener('click', async () => {
     $('launch').disabled=true;
@@ -266,8 +387,124 @@
     finally{$('launch').disabled=false;}
   });
   $('copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText($('exercise-text').value); toast('Текст скопирован'); }
-    catch { $('exercise-text').focus(); $('exercise-text').select(); toast('Нажми Ctrl+C, чтобы скопировать текст'); }
+    try { await navigator.clipboard.writeText(exercise.words.join(' ')); toast('Текст скопирован'); }
+    catch { const range = document.createRange(); range.selectNodeContents($('exercise-text')); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); toast('Нажми Ctrl+C, чтобы скопировать текст'); }
+  });
+  function updateCustomFields() {
+    const mixed = $('custom-kind').value === 'mixed';
+    $('custom-source').disabled = mixed;
+    $('custom-ratio').disabled = mixed || ['uppercase', 'digits', 'punctuation'].includes($('custom-kind').value);
+    $('manual-fields').hidden = mixed || $('custom-source').value !== 'manual';
+    $('custom-targets').placeholder = $('custom-kind').value === 'pairs'
+      ? ($('language').value === 'russian' ? 'ст, пр, ро' : 'th, st, er')
+      : ($('language').value === 'russian' ? 'скорость, строка' : 'street, rhythm');
+    if ($('custom-kind').value === 'sequences') {
+      $('custom-targets').placeholder = $('language').value === 'russian' ? 'стр, про, ость' : 'str, ing, ight';
+    }
+    const symbolPlaceholders = { uppercase: $('language').value === 'russian' ? 'А П С Т' : 'A S T R', digits: '0 1 2 3', punctuation: '. , ! ?' };
+    if (symbolPlaceholders[$('custom-kind').value]) {
+      $('custom-targets').placeholder = symbolPlaceholders[$('custom-kind').value];
+    }
+    $('target-help').textContent = ['uppercase', 'digits', 'punctuation'].includes($('custom-kind').value)
+      ? 'До 12 отдельных символов. Разделяй пробелами; для пунктуации запятая тоже считается целью.'
+      : 'До 12 целей через пробел или запятую. Нажми на рекомендацию, чтобы добавить или убрать её.';
+    const exact = $('custom-volume').value === 'words';
+    $('custom-count-label').hidden = !exact;
+    $('custom-count').disabled = !exact;
+    $('custom-seconds-label').hidden = exact;
+    renderSuggestions();
+  }
+  function draftTargets() {
+    const kind = $('custom-kind').value;
+    const value = kind === 'uppercase' ? $('custom-targets').value.toUpperCase() : $('custom-targets').value.toLowerCase();
+    return ['uppercase', 'digits', 'punctuation'].includes(kind)
+      ? [...value].filter(character => !/\s/u.test(character)) : value.split(/[\s,;]+/u).filter(Boolean);
+  }
+  function renderSuggestions() {
+    const kind = $('custom-kind').value;
+    const rows = kind === 'mixed' ? [] : core.profile(state.sessions, scope())[kind].slice(0, 24);
+    const selected = draftTargets();
+    $('custom-suggestions').replaceChildren(...rows.map(item => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'target-choice';
+      button.textContent = item.key;
+      button.setAttribute('aria-pressed', String(selected.includes(item.key)));
+      button.title = item.attempts + ' наблюдений · ' + format(item.errorRate * 100) + '% ошибок';
+      button.addEventListener('click', () => {
+        const targets = draftTargets();
+        if (targets.includes(item.key)) {
+          $('custom-targets').value = targets.filter(target => target !== item.key).join(' ');
+        } else if (targets.length < 12) {
+          $('custom-targets').value = [...targets, item.key].join(' ');
+        } else {
+          $('custom-error').textContent = 'Можно выбрать не больше 12 целей.';
+        }
+        renderSuggestions();
+      });
+      return button;
+    }));
+  }
+  function fillCustomForm(options = currentCustom()) {
+    $('custom-kind').value = $('practice-kind').value;
+    $('custom-source').value = options.source;
+    $('custom-targets').value = options.targets.join(' ');
+    $('custom-ratio').value = String(options.ratio);
+    $('custom-volume').value = options.wordCount === null ? 'time' : 'words';
+    $('custom-count').value = options.wordCount ?? 40;
+    $('custom-seconds').value = $('practice-duration').value;
+    $('custom-highlight').checked = options.highlight;
+    $('custom-error').textContent = '';
+    updateCustomFields();
+  }
+  $('practice-customize').addEventListener('click', () => {
+    fillCustomForm();
+    $('practice-dialog').showModal();
+  });
+  for (const id of ['custom-close', 'custom-cancel']) {
+    $(id).addEventListener('click', () => $('practice-dialog').close());
+  }
+  $('custom-reset').addEventListener('click', () => {
+    fillCustomForm(defaultCustom());
+    $('custom-kind').value = 'pairs';
+    $('custom-seconds').value = '60';
+    updateCustomFields();
+  });
+  $('custom-kind').addEventListener('change', () => {
+    $('custom-targets').value = '';
+    $('custom-error').textContent = '';
+    updateCustomFields();
+  });
+  for (const id of ['custom-source', 'custom-volume']) {
+    $(id).addEventListener('change', updateCustomFields);
+  }
+  $('custom-targets').addEventListener('input', renderSuggestions);
+  $('practice-form').addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      const kind = $('custom-kind').value;
+      const manual = kind !== 'mixed' && $('custom-source').value === 'manual';
+      const targets = manual ? practiceOptions.parseTargets($('custom-targets').value, $('language').value, kind) : [];
+      if (manual && !targets.length) throw new Error('Добавь хотя бы одну цель или выбери автоматический подбор.');
+      const next = {
+        source: manual ? 'manual' : 'auto', targets, kind, seconds: Number($('custom-seconds').value),
+        ratio: Number($('custom-ratio').value),
+        wordCount: $('custom-volume').value === 'words' ? Number($('custom-count').value) : null,
+        highlight: $('custom-highlight').checked
+      };
+      analytics.plan(state.sessions, KeyloomWords[$('language').value], {
+        ...scope(), kind, seconds: Number($('custom-seconds').value),
+        manualTargets: targets, ratio: next.ratio, wordCount: next.wordCount, extras: practiceExtras()
+      });
+      customProfiles.set(customKey(), next);
+      selectedFocus = undefined;
+      $('practice-kind').value = kind;
+      $('practice-duration').value = $('custom-seconds').value;
+      makeExercise();
+      $('practice-dialog').close();
+    } catch (error) {
+      $('custom-error').textContent = error.message;
+    }
   });
   async function saveSettings() {
     if (demo) { toast('Деморежим не меняет настройки'); $('layout').value = state.settings.layout; return; }

@@ -14,9 +14,38 @@
   const entry = (map, key) => map[key] ??= { attempts: 0, errors: 0, timings: [] };
   const normalize = word => word.normalize('NFC').toLocaleLowerCase();
   const alphabetic = text => /^[a-zа-яё]+$/iu.test(text);
+  const PUNCTUATION = '.,!?;:-—–…\'"«»“”‘’()[]{}/%+*=<>_\\@#$&|~^`№';
+  const KINDS = ['pairs', 'sequences', 'words', 'mixed', 'uppercase', 'digits', 'punctuation'];
+  function characterGroup(character) {
+    if (/^[A-ZА-ЯЁ]$/u.test(character)) return 'uppercase';
+    if (/^[0-9]$/u.test(character)) return 'digits';
+    if (character.length === 1 && PUNCTUATION.includes(character)) return 'punctuation';
+    return null;
+  }
+  function supportedToken(text) {
+    return typeof text === 'string' && text.length > 0 && text.length <= 100 &&
+      [...text].every(character => alphabetic(character) || characterGroup(character));
+  }
+  function validTarget(kind, text) {
+    if (typeof text !== 'string') return false;
+    if (['uppercase', 'digits', 'punctuation'].includes(kind)) return characterGroup(text) === kind;
+    if (!alphabetic(text)) return false;
+    if (kind === 'pairs') return text.length === 2;
+    if (kind === 'sequences') return text.length >= 3 && text.length <= 5;
+    return text.length <= 100;
+  }
 
   function analyze(events, metadata = {}) {
-    const chars = Object.create(null), pairs = Object.create(null), words = Object.create(null);
+    const chars = Object.create(null), pairs = Object.create(null), sequences = Object.create(null), words = Object.create(null);
+    const special = { uppercase: Object.create(null), digits: Object.create(null), punctuation: Object.create(null) };
+    function observeSpecial(character, error, timing) {
+      const group = characterGroup(character);
+      if (!group) return;
+      const row = entry(special[group], character);
+      row.attempts++;
+      row.errors += Number(error);
+      if (Number.isFinite(timing)) row.timings.push(timing);
+    }
     const instances = new Map();
     let previous = null, presses = 0, correct = 0, corrections = 0;
     let start = null, end = 0;
@@ -26,7 +55,7 @@
       end = Math.max(end, e.time);
       let word = instances.get(e.wordIndex);
       if (!word) {
-        word = { target: e.target, seen: new Set(), firstErrors: new Set(), first: null, last: null, errors: 0, dirty: false, complete: false, timings: [] };
+        word = { edges: new Map(), target: e.target, seen: new Set(), firstErrors: new Set(), first: null, last: null, errors: 0, dirty: false, complete: false, timings: [] };
         instances.set(e.wordIndex, word);
       }
       if (e.type === 'delete') {
@@ -53,6 +82,7 @@
           word.seen.add(p);
           word.firstErrors.add(p);
           const c = entry(chars, normalize(target[p])); c.attempts++; c.errors++;
+          observeSpecial(target[p], true);
           if (p > 0 && alphabetic(target.slice(p - 1, p + 1).join(''))) {
             const pair = entry(pairs, normalize(target.slice(p - 1, p + 1).join('')));
             pair.attempts++; pair.errors++;
@@ -69,6 +99,7 @@
       const cleanTransition = firstPass && isCorrect && previous?.correct && previous.firstPass &&
         previous.wordIndex === e.wordIndex && previous.position === e.position - 1 &&
         elapsed >= 10 && elapsed <= PAUSE_MS;
+      if (cleanTransition) word.edges.set(e.position, elapsed);
       if (previous && elapsed > PAUSE_MS) word.dirty = true;
       word.first ??= e.time;
       word.last = e.time;
@@ -76,6 +107,7 @@
         word.seen.add(e.position);
         if (!isCorrect) word.firstErrors.add(e.position);
         const c = entry(chars, normalize(expected)); c.attempts++; c.errors += Number(!isCorrect);
+        observeSpecial(expected, !isCorrect, cleanTransition ? elapsed : undefined);
         if (e.position > 0) {
           const key = normalize(target.slice(e.position - 1, e.position + 1).join(''));
           if (alphabetic(key)) {
@@ -88,9 +120,25 @@
       previous = { ...e, correct: isCorrect, firstPass };
     }
     for (const word of instances.values()) {
+      for (let length = 3; length <= 5; length++) {
+        for (let start = 0; start + length <= word.target.length; start++) {
+          const positions = Array.from({ length }, (_, index) => start + index);
+          if (!positions.every(position => word.seen.has(position))) continue;
+          const key = normalize(word.target.slice(start, start + length));
+          if (!alphabetic(key)) continue;
+          const row = entry(sequences, key);
+          row.attempts++;
+          row.errors += Number(positions.some(position => word.firstErrors.has(position)));
+          const edges = positions.slice(1).map(position => word.edges.get(position));
+          if (!positions.some(position => word.firstErrors.has(position)) && edges.every(Number.isFinite)) {
+            row.timings.push(edges.reduce((sum, value) => sum + value, 0) / edges.length);
+          }
+        }
+      }
       // Partial final words do contribute observed characters, but not whole-word accuracy.
-      if (!word.complete || !alphabetic(word.target)) continue;
-      const w = entry(words, normalize(word.target));
+      const lexical = word.target.replace(/^[^a-zа-яё]+|[^a-zа-яё]+$/giu, '');
+      if (!word.complete || !alphabetic(lexical)) continue;
+      const w = entry(words, normalize(lexical));
       w.attempts++; w.errors += Number(word.errors > 0);
       if (!word.dirty && word.timings.length === [...word.target].length - 1 && word.timings.length) {
         w.timings.push((word.last - word.first) / word.timings.length);
@@ -104,17 +152,19 @@
       source: metadata.source ?? 'monkeytype-dom-v1', duration, presses, corrections,
       accuracy: presses ? correct / presses * 100 : 0,
       wpm: duration > 0 ? correct / 5 / (duration / 60) : 0,
-      chars, pairs, words,
+      chars, pairs, sequences, words, ...special,
       ...(metadata.training ? { training: metadata.training } : {}),
     };
   }
 
   function profile(sessions, { language = 'english', layout = 'default' } = {}) {
     const selected = sessions.filter(s => s.language === language && s.layout === layout && s.status === 'completed');
-    const groups = { chars: Object.create(null), pairs: Object.create(null), words: Object.create(null) };
-    for (const session of selected) {
+    const groups = { chars: Object.create(null), pairs: Object.create(null), sequences: Object.create(null), words: Object.create(null), uppercase: Object.create(null), digits: Object.create(null), punctuation: Object.create(null) };
+    for (const session of sessions.filter(s => s.layout === layout && s.status === 'completed')) {
       for (const group of Object.keys(groups)) {
-        for (const [key, value] of Object.entries(session[group])) {
+        if (session.language !== language && !['digits', 'punctuation'].includes(group)) continue;
+        for (const [key, value] of Object.entries(session[group] ?? {})) {
+          if (group === 'chars' && !alphabetic(key)) continue;
           const row = entry(groups[group], key);
           row.attempts += value.attempts;
           row.errors += value.errors;
@@ -124,11 +174,13 @@
     }
     const baseline = median(Object.values(groups.pairs).flatMap(v => v.timings)) ?? 180;
     for (const group of Object.keys(groups)) {
+      const groupBaseline = ['digits', 'punctuation'].includes(group)
+        ? median(Object.values(groups[group]).flatMap(value => value.timings)) ?? 180 : baseline;
       groups[group] = Object.entries(groups[group]).map(([key, value]) => {
         const ms = median(value.timings);
         // Shrink tiny samples; timing only affects priority after three clean observations.
         const errorRate = value.errors / Math.max(1, value.attempts);
-        const slow = value.timings.length >= 3 && ms ? Math.max(0, ms / baseline - 1) : 0;
+        const slow = value.timings.length >= 3 && ms ? Math.max(0, ms / groupBaseline - 1) : 0;
         const confidence = value.attempts / (value.attempts + 8);
         return { key, ...value, ms, errorRate, confidence,
           reliable: value.attempts >= 5,
@@ -142,15 +194,16 @@
       minutes: selected.reduce((sum, s) => sum + s.duration, 0) / 60 };
   }
 
-  function generate(profile, dictionary, { count = 40, random = Math.random, focus } = {}) {
-    const targets = focus ? [focus] : profile.pairs.filter(r => r.reliable && r.score > 0).slice(0, 3).map(r => r.key);
+  function generate(profile, dictionary, { count = 40, random = Math.random, focus, ratio = .75, targets: explicitTargets } = {}) {
+    const targets = explicitTargets ?? (focus ? [focus] : profile.pairs.filter(r => r.reliable && r.score > 0).slice(0, 3).map(r => r.key));
     const weakWords = profile.words.filter(r => r.reliable && r.score > 0).slice(0, 12).map(r => r.key);
     const pool = [...new Set([...dictionary, ...weakWords])].filter(alphabetic);
     const targeted = pool.filter(word => targets.some(pair => word.includes(pair)) || weakWords.includes(word));
     const picked = [];
     const limit = Math.min(1000, Math.max(10, Math.round(count)));
     for (let i = 0; i < limit; i++) {
-      const source = targeted.length && i % 4 !== 3 ? targeted : pool;
+      const useTarget = Math.ceil((i + 1) * ratio) > Math.ceil(i * ratio);
+      const source = targeted.length && useTarget ? targeted : pool;
       const candidates = source.filter(w => w !== picked.at(-1));
       const choices = candidates.length ? candidates : source;
       if (!choices.length) break;
@@ -168,17 +221,21 @@
     if (!['time','words','custom','quote','unknown'].includes(s.mode)) return false;
     if (typeof s.source !== 'string' || s.source.length > 80) return false;
     if(s.training!==undefined){const t=s.training;
-      if(!t||typeof t.id!=='string'||!/^[a-zA-Z0-9-]{1,100}$/.test(t.id)||!['pairs','words','mixed'].includes(t.kind)||![30,60,120,180,300].includes(t.seconds)||!Array.isArray(t.targets)||t.targets.length>12||!t.targets.every(k=>typeof k==='string'&&/^[a-zа-яё]{1,100}$/iu.test(k)))return false;
+      if (t?.wordCount !== undefined && (!Number.isInteger(t.wordCount) || t.wordCount < 10 || t.wordCount > 500)) return false;
+      if(!t||typeof t.id!=='string'||!/^[a-zA-Z0-9-]{1,100}$/.test(t.id)||!KINDS.includes(t.kind)||![30,60,120,180,300].includes(t.seconds)||!Array.isArray(t.targets)||t.targets.length>12||!t.targets.every(k=>validTarget(t.kind,k)))return false;
     }
     for (const key of ['duration', 'presses', 'corrections', 'accuracy', 'wpm']) {
       if (!Number.isFinite(s[key]) || s[key] < 0) return false;
     }
     if (s.duration > 86400 || s.presses > MAX_EVENTS || s.accuracy > 100 || s.wpm > 100000) return false;
-    for (const group of ['chars', 'pairs', 'words']) {
+    for (const group of ['chars', 'pairs', 'sequences', 'words', 'uppercase', 'digits', 'punctuation']) {
+      if (['sequences', 'uppercase', 'digits', 'punctuation'].includes(group) && s[group] === undefined) continue;
       if (!s[group] || typeof s[group] !== 'object' || Array.isArray(s[group])) return false;
       const entries = Object.entries(s[group]);
       if (entries.length > MAX_EVENTS) return false;
       for (const [key, v] of entries) {
+        if (group === 'sequences' && (key.length < 3 || key.length > 5 || !alphabetic(key))) return false;
+        if (['uppercase', 'digits', 'punctuation'].includes(group) && characterGroup(key) !== group) return false;
         if (!key || key.length > 100 || ['__proto__', 'constructor', 'prototype'].includes(key)) return false;
         if (!v || !Number.isInteger(v.attempts) || v.attempts < 1 || v.attempts > MAX_EVENTS) return false;
         if (!Number.isInteger(v.errors) || v.errors < 0 || v.errors > v.attempts) return false;
@@ -208,5 +265,5 @@
     if (data?.version !== VERSION || data?.app !== 'keyloom') throw new Error('Нужен файл экспорта Keyloom v1');
     return mergeSessions([], data.sessions);
   }
-  globalThis.KeyloomCore = Object.freeze({ VERSION, MAX_SESSIONS, MAX_EVENTS, MAX_STORAGE_BYTES, PAUSE_MS, median, analyze, profile, generate, validateSession, mergeSessions, parseBackup });
+  globalThis.KeyloomCore = Object.freeze({ VERSION, MAX_SESSIONS, MAX_EVENTS, MAX_STORAGE_BYTES, PAUSE_MS, PUNCTUATION, KINDS, characterGroup, supportedToken, validTarget, median, analyze, profile, generate, validateSession, mergeSessions, parseBackup });
 })();

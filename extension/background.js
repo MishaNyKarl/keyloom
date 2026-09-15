@@ -19,7 +19,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
         const id=new URL(sender.url).searchParams.get('keyloomExercise');
         const plan=exercises.find(p=>p.id===id&&p.id===incoming.training.id&&p.language===incoming.language&&p.layout===incoming.layout);
         if(!plan||incoming.mode!=='custom') delete incoming.training;
-        else incoming.training={id:plan.id,targets:plan.targets,kind:plan.kind,seconds:plan.seconds};
+        else incoming.training={id:plan.id,targets:plan.targets,kind:plan.kind,seconds:plan.seconds,...(plan.wordCount ? {wordCount:plan.wordCount} : {})};
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
       await chrome.storage.local.set({ sessions: next });

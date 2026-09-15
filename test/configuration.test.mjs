@@ -19,10 +19,10 @@ test('actual unsupported modifiers return specific instructions', () => {
     assert.equal(result.ok,false); assert.ok(result.reason.includes(expected));
   }
 });
-test('disabled punctuation/numbers are allowed; active controls name the blocker', () => {
+test('punctuation and numbers toggles are accepted in supported tests', () => {
   assert.equal(inspect({buttons:[{text:'punctuation',selected:false},{text:'numbers',selected:false}]}).ok,true);
-  assert.equal(inspect({buttons:[{text:'numbers',selected:true}]}).reason,'Отключите numbers');
-  assert.equal(inspect({buttons:[{text:'\uf1fa punctuation',selected:true}]}).reason,'Отключите punctuation');
+  assert.equal(inspect({buttons:[{text:'numbers',selected:true}]}).ok,true);
+  assert.equal(inspect({buttons:[{text:'\uf1fa punctuation',selected:true}]}).ok,true);
 });
 function button(text, classes = [], icons = [], pressed = null) {
   return {textContent:text,classList:{contains:value=>classes.includes(value)},getAttribute:()=>pressed,

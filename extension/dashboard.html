@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="dashboard.css">
   <script src="core.js" defer></script><script src="words.js" defer></script>
   <script src="analytics.js" defer></script>
+  <script src="practice-options.js" defer></script>
   <script src="vendor/lz-string.js" defer></script><script src="practice.js" defer></script>
   <script src="demo.js" defer></script><script src="dashboard.js" defer></script>
 </head>
@@ -23,7 +24,7 @@
     <div class="sidebar-bottom">
       <div class="local-card"><span class="status-dot"></span><strong>Только на твоём устройстве</strong><p>Твой прогресс хранится<br>в этом браузере.</p></div>
       <a href="https://monkeytype.com" target="_blank" rel="noreferrer" class="monkey-link">Открыть Monkeytype <span>↗</span></a>
-      <div class="version">KEYLOOM <span>v0.2.0</span></div>
+      <div class="version">KEYLOOM <span>v0.5.0</span></div>
     </div>
   </aside>
   <main>
@@ -44,28 +45,34 @@
           <article class="practice-card"><div class="eyebrow">СЛЕДУЮЩИЙ ШАГ <span>↗</span></div><h2 id="practice-title">Начнём<br>со знакомства.</h2><p id="practice-description">Небольшой тест поможет увидеть твой ритм и первые сложные сочетания.</p><div id="focus-chips" class="focus-chips"></div><div class="practice-meta"><span>40 слов</span><span>≈ 1 минута</span></div><button id="start-practice" class="primary">Подобрать тренировку <span>→</span></button></article>
         </div>
         <div class="bottom-grid">
-          <article class="panel weaknesses"><div class="panel-heading"><div><h2>Здесь можно стать лучше</h2><p>Приоритет учитывает ошибки и чистую скорость.</p></div><div class="segments" aria-label="Тип статистики"><button data-group="pairs" class="active" aria-pressed="true">Связки</button><button data-group="words" aria-pressed="false">Слова</button></div></div><div id="weakness-table"></div><div class="panel-footer">От 5 наблюдений · редкие сочетания пока не ранжируем</div></article>
+          <article class="panel weaknesses"><div class="panel-heading"><div><h2>Здесь можно стать лучше</h2><p>Приоритет учитывает ошибки и чистую скорость.</p></div><div class="segments" aria-label="Тип статистики"><button data-group="pairs" class="active" aria-pressed="true">Пары</button><button data-group="sequences" aria-pressed="false">Связки</button><button data-group="words" aria-pressed="false">Слова</button></div></div><div id="weakness-table"></div><div class="panel-footer">От 5 наблюдений · редкие сочетания пока не ранжируем</div></article>
           <article class="panel keyboard-panel"><div class="panel-heading"><div><h2>Карта точности</h2><p>Где пальцам нужно чуть больше практики.</p></div></div><div id="keyboard" class="keyboard"></div><div class="heat-legend"><span>меньше ошибок</span><i></i><i></i><i></i><i></i><span>больше</span></div><p class="keyboard-note">Буквы, а не физические клавиши. Наведи, чтобы увидеть статистику.</p></article>
         </div>
       </section>
       <section id="practice" class="view" hidden>
-        <div class="page-heading"><div><div class="eyebrow">ОСОЗНАННАЯ ПРАКТИКА</div><h1>Одна задача за раз<span>.</span></h1><p>Сначала точность. Скорость придёт с уверенностью.</p></div></div>
+        <div class="page-heading"><div><div class="eyebrow">ОСОЗНАННАЯ ПРАКТИКА</div><h1>Одна задача за раз<span>.</span></h1><p>Сначала точность. Скорость придёт с уверенностью.</p></div><button id="practice-customize" class="gear-button" aria-label="Настроить практику" title="Настроить практику">⚙</button></div>
         <div id="practice-progress" class="stats-grid"></div>
         <article class="panel workout-settings">
           <label>Язык тренировки<select id="practice-language"><option value="english">English</option><option value="russian">Русский</option></select></label>
-          <label>Что тренировать<select id="practice-kind"><option value="pairs">Сложные связки</option><option value="words">Сложные слова</option><option value="mixed">Обычная практика</option></select></label>
+          <label>Что тренировать<select id="practice-kind"><option value="pairs">Пары · 2 буквы</option><option value="sequences">Связки · 3–5 букв</option><option value="words">Сложные слова</option><option value="uppercase">Заглавные буквы</option><option value="digits">Цифры · все языки</option><option value="punctuation">Пунктуация · все языки</option><option value="mixed">Обычная практика</option></select></label>
           <label>Примерная длительность<select id="practice-duration"><option value="30">30 секунд</option><option value="60" selected>1 минута</option><option value="120">2 минуты</option><option value="180">3 минуты</option><option value="300">5 минут</option></select></label>
+          <fieldset class="practice-extras"><legend>Иногда добавлять в текст</legend>
+            <label><input type="checkbox" id="extra-uppercase"> Заглавные буквы</label>
+            <label><input type="checkbox" id="extra-digits"> Цифры</label>
+            <label><input type="checkbox" id="extra-punctuation"> Знаки препинания</label>
+          </fieldset>
+          <p id="symbols-note" class="muted">Заглавные — в выбранном языке. Цифры и знаки — общая статистика для всех языков.</p>
           <p id="duration-explanation" class="muted"></p>
         </article>
-        <article class="panel exercise"><div class="panel-heading"><h2 id="exercise-title">Твоя тренировка</h2><span class="pill">40 слов</span></div><p id="exercise-reason"></p><div id="exercise-focus" class="focus-chips"></div><label for="exercise-text" class="field-label">ТЕКСТ ТРЕНИРОВКИ</label><textarea id="exercise-text" readonly rows="7"></textarea><div class="exercise-actions"><button id="launch" class="primary">Начать в Monkeytype ↗</button><button id="regenerate" class="secondary">Другие слова</button><button id="copy" class="text-button">Скопировать текст</button></div><p class="muted">Откроется custom-тест. Если ссылка не сработает: custom → change → вставь текст. Для записи результатов расширение должно быть установлено.</p></article>
+        <article class="panel exercise"><div class="panel-heading"><h2 id="exercise-title">Твоя тренировка</h2><span class="pill">40 слов</span></div><p id="exercise-reason"></p><div id="exercise-focus" class="focus-chips"></div><div id="exercise-label" class="field-label">ТЕКСТ ТРЕНИРОВКИ · ЦЕЛИ ВЫДЕЛЕНЫ ЦВЕТОМ</div><div id="exercise-text" class="exercise-preview" tabindex="0" role="region" aria-labelledby="exercise-label"></div><div class="exercise-actions"><button id="launch" class="primary">Начать в Monkeytype ↗</button><button id="regenerate" class="secondary">Другие слова</button><button id="copy" class="text-button">Скопировать текст</button></div><p class="muted">Откроется custom-тест. Если ссылка не сработает: custom → change → вставь текст. Для записи результатов расширение должно быть установлено.</p></article>
         <article class="panel workout-results"><div class="panel-heading"><div><div class="eyebrow">ПОСЛЕ ПРАКТИКИ</div><h2>Как прошла тренировка</h2></div><label class="select-label">Попытка<select id="result-selection" aria-label="Результат тренировки"></select></label></div><div id="workout-result"></div></article>
       </section>
       <section id="statistics" class="view" hidden>
         <div class="page-heading"><div><div class="eyebrow">СТАТИСТИКА ПО ЯЗЫКУ</div><h1>Прогресс в деталях<span>.</span></h1><p id="statistics-context">Только выбранный язык и профиль раскладки.</p></div><div class="statistics-filters"><label>Период<select id="stats-period"><option value="30">30 дней</option><option value="7">7 дней</option><option value="all">Всё время</option></select></label><label>Режим<select id="stats-mode"><option value="all">Все режимы</option><option value="time">Time</option><option value="words">Words</option><option value="custom">Custom</option><option value="quote">Quote</option></select></label></div></div>
         <div id="detailed-metrics" class="stats-grid"></div>
         <article class="panel"><div class="panel-heading"><h2>Динамика результатов</h2><label class="select-label">Показатель<select id="stats-chart-metric"><option value="wpm">Скорость, WPM</option><option value="accuracy">Точность, %</option></select></label></div><div id="stats-chart" class="chart"></div><p class="chart-caption">До 24 последних завершённых тестов в выбранном периоде. WPM — оценка Keyloom.</p></article>
-        <article class="panel activity-panel"><div class="panel-heading"><div><h2>Ритм практики</h2><p>Последние 8 недель · дни по местному времени · выбранный язык, все режимы</p></div><span id="streak-detail" class="pill"></span></div><div id="activity-calendar" class="activity-calendar"></div></article>
-        <article class="panel detail-panel"><div class="panel-heading"><div><h2>Буквы, связки и слова</h2><p>Ошибки первого ввода; исправления не скрывают опечатки.</p></div></div><div class="detail-controls"><select id="detail-group" aria-label="Детальная статистика"><option value="pairs">Связки</option><option value="chars">Буквы</option><option value="words">Слова</option></select><input id="detail-search" placeholder="Найти букву, связку или слово" aria-label="Поиск по статистике"><select id="detail-sort" aria-label="Сортировка статистики"><option value="score">По приоритету</option><option value="errorRate">По доле ошибок</option><option value="ms">По задержке</option><option value="attempts">По числу попыток</option></select></div><div id="detail-table" class="history-scroll"></div><div class="detail-pagination"><button id="detail-prev" class="text-button">← Назад</button><span id="detail-page"></span><button id="detail-next" class="text-button">Далее →</button></div></article>
+        <article class="panel activity-panel"><div class="panel-heading"><div><h2>Ритм практики</h2><p>8 календарных недель · столбец — неделя, строки — пн–вс · местное время · выбранный язык, все режимы</p></div><span id="streak-detail" class="pill"></span></div><div id="activity-calendar" class="activity-calendar"></div></article>
+        <article class="panel detail-panel"><div class="panel-heading"><div><h2>Буквы, пары, связки и слова</h2><p>Ошибки первого ввода; исправления не скрывают опечатки.</p></div></div><div class="detail-controls"><select id="detail-group" aria-label="Детальная статистика"><option value="pairs">Пары</option><option value="sequences">Связки</option><option value="chars">Буквы</option><option value="uppercase">Заглавные буквы</option><option value="digits">Цифры · все языки</option><option value="punctuation">Пунктуация · все языки</option><option value="words">Слова</option></select><input id="detail-search" placeholder="Найти букву, пару, связку или слово" aria-label="Поиск по статистике"><select id="detail-sort" aria-label="Сортировка статистики"><option value="score">По приоритету</option><option value="errorRate">По доле ошибок</option><option value="ms">По задержке</option><option value="attempts">По числу попыток</option></select></div><p id="detail-scope" class="muted result-caption"></p><div id="detail-table" class="history-scroll"></div><div class="detail-pagination"><button id="detail-prev" class="text-button">← Назад</button><span id="detail-page"></span><button id="detail-next" class="text-button">Далее →</button></div></article>
         <p class="muted">Все показатели рассчитаны по сохранённой истории (до 160 сессий). Изменение скорости: последние 5 тестов против предыдущих 5, без тестов короче 5 секунд. Разный режим и сложность текста могут влиять на сравнение. «Потренировано» означает практику связки, а не подтверждённое освоение.</p>
       </section>
       <section id="history" class="view" hidden><div class="page-heading"><div><div class="eyebrow">ИСТОРИЯ ПРАКТИКИ</div><h1>Всё начинается с попытки<span>.</span></h1><p>Последние 160 сессий. Прерванные тесты не влияют на рекомендации.</p></div></div><article class="panel" id="history-list"></article></section>
@@ -78,5 +85,37 @@
     </div>
   </main>
   <div id="toast" role="status" class="toast" hidden></div>
+  <dialog id="practice-dialog" aria-labelledby="custom-title">
+    <form id="practice-form">
+      <div class="modal-heading">
+        <div><div class="eyebrow">ТВОЙ СПОСОБ ПРАКТИКИ</div><h2 id="custom-title">Настрой тренировку</h2></div>
+        <button type="button" id="custom-close" class="text-button" aria-label="Закрыть настройки">✕</button>
+      </div>
+      <p class="muted">Настройки применяются к текущему языку. Можно выбрать рекомендации или задать собственные цели.</p>
+      <div class="custom-grid">
+        <label>Тип целей<select id="custom-kind"><option value="pairs">Пары · 2 буквы</option><option value="sequences">Связки · 3–5 букв</option><option value="words">Целые слова</option><option value="uppercase">Заглавные буквы</option><option value="digits">Цифры · все языки</option><option value="punctuation">Пунктуация · все языки</option><option value="mixed">Обычная практика</option></select></label>
+        <label>Подбор целей<select id="custom-source"><option value="auto">Автоматически по статистике</option><option value="manual">Выберу сам</option></select></label>
+      </div>
+      <div id="manual-fields">
+        <label for="custom-targets">Свои цели</label>
+        <textarea id="custom-targets" rows="2" maxlength="600" placeholder="Например: ст, пр, ро" aria-describedby="target-help"></textarea>
+        <p id="target-help" class="muted">До 12 целей через пробел или запятую. Нажми на рекомендацию, чтобы добавить или убрать её.</p>
+        <div id="custom-suggestions" class="target-suggestions" aria-label="Цели из статистики"></div>
+      </div>
+      <div class="custom-grid">
+        <label>Доля целевых слов<select id="custom-ratio"><option value="0.5">Не меньше 50%</option><option value="0.75">Не меньше 75%</option><option value="1">100% — только цели</option></select></label>
+        <label>Как задать объём<select id="custom-volume"><option value="time">По примерному времени</option><option value="words">Точное число слов</option></select></label>
+        <label id="custom-seconds-label">Примерная длительность<select id="custom-seconds"><option value="30">30 секунд</option><option value="60">1 минута</option><option value="120">2 минуты</option><option value="180">3 минуты</option><option value="300">5 минут</option></select></label>
+        <label id="custom-count-label">Число слов<input id="custom-count" type="number" min="10" max="500" step="1" value="40"></label>
+      </div>
+      <label class="highlight-option"><input id="custom-highlight" type="checkbox" checked> Подсвечивать цели в тексте</label>
+      <p id="custom-error" role="alert"></p>
+      <div class="modal-actions">
+        <button type="button" id="custom-reset" class="text-button">Сбросить настройки</button>
+        <button type="button" id="custom-cancel" class="secondary">Отмена</button>
+        <button type="submit" class="primary">Применить</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

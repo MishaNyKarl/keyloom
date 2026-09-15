@@ -58,7 +58,7 @@ test('unrelated origins are rejected; extension pages can read the full profile'
 });
 
 test('exercise is registered before launch and returned only for its matching link',async()=>{
- const h=await harness();const plan={id:'exercise-one',language:'english',layout:'default',kind:'pairs',seconds:60,words:Array(10).fill('cat'),targets:['ca']};
+ const h=await harness();const plan={id:'exercise-one',language:'english',layout:'default',kind:'pairs',seconds:60,words:Array(10).fill('cat'),wordCount:10,targets:['ca']};
  assert.equal((await h.send({type:'START_PRACTICE',plan})).ok,false);
  assert.equal((await h.send({type:'START_PRACTICE',plan},'chrome-extension://test-extension/dashboard.html')).ok,true);
  assert.equal(h.storage.exercises.length,1);assert.equal(new URL(h.opened[0]).searchParams.get('keyloomExercise'),plan.id);
@@ -67,6 +67,7 @@ test('exercise is registered before launch and returned only for its matching li
  const result={...h.session('linked'),mode:'custom',training:{id:plan.id,kind:'pairs',seconds:60,targets:['forged']}};
  assert.equal((await h.send({type:'SAVE_SESSION',session:result},'https://monkeytype.com/?keyloomExercise=exercise-one')).ok,true);
  assert.deepEqual(h.storage.sessions[0].training.targets,['ca']);
+ assert.equal(h.storage.sessions[0].training.wordCount,10);
  await h.send({type:'OPEN_DASHBOARD',sessionId:'linked'});
  assert.match(h.opened.at(-1),/session=linked&language=english#practice/);
  await h.send({type:'SAVE_SESSION',session:{...result,id:'unlinked'}});
@@ -77,4 +78,33 @@ test('disabled capture and invalid exercise never open a test tab',async()=>{
  assert.equal((await h.send({type:'START_PRACTICE',plan:{}},url)).ok,false);
  h.storage.settings.enabled=false;
  assert.equal((await h.send({type:'START_PRACTICE',plan:{}},url)).ok,false);assert.equal(h.opened.length,0);
+});
+
+test('sequence exercise metadata survives background storage and dashboard return', async () => {
+  const h = await harness();
+  const plan = { id: 'sequence-test', language: 'english', layout: 'default', kind: 'sequences', seconds: 60, words: Array(10).fill('cat'), targets: ['cat'] };
+  assert.equal((await h.send({ type: 'START_PRACTICE', plan }, 'chrome-extension://test-extension/dashboard.html')).ok, true);
+  const session = { ...h.session('sequence-result'), mode: 'custom', training: { id: plan.id } };
+  assert.equal((await h.send({ type: 'SAVE_SESSION', session }, 'https://monkeytype.com/?keyloomExercise=sequence-test')).ok, true);
+  assert.equal(h.storage.sessions[0].training.kind, 'sequences');
+  assert.equal(h.storage.sessions[0].sequences.cat.attempts, 1);
+});
+
+test('symbol exercises round-trip exact punctuation and save category-specific results', async () => {
+  const h = await harness();
+  const plan = {
+    id: 'punctuation-test', language: 'russian', layout: 'default', kind: 'punctuation',
+    seconds: 60, words: Array(10).fill('7,"'), targets: [',', '"']
+  };
+  const started = await h.send({ type: 'START_PRACTICE', plan }, 'chrome-extension://test-extension/dashboard.html');
+  assert.equal(started.ok, true);
+  const url = new URL(h.opened.at(-1));
+  const decoded = JSON.parse(h.context.LZString.decompressFromEncodedURIComponent(url.searchParams.get('testSettings')));
+  assert.deepEqual(decoded[2].text, plan.words);
+  const session = h.context.KeyloomCore.analyze([...plan.words[0]].map((typed, position) => ({
+    target: plan.words[0], typed, position, wordIndex: 0, type: 'insert', time: position * 100
+  })), { id: 'punctuation-result', mode: 'custom', language: 'russian', training: { id: plan.id } });
+  assert.equal((await h.send({ type: 'SAVE_SESSION', session }, url.toString())).ok, true);
+  assert.equal(h.storage.sessions[0].training.kind, 'punctuation');
+  assert.equal(h.storage.sessions[0].punctuation[','].attempts, 1);
 });

@@ -90,9 +90,9 @@
     const deleting = event.inputType?.startsWith('delete');
     if (!deleting && (event.inputType !== 'insertText' || [...(event.data ?? '')].length !== 1)) return;
     const target = targetText(node);
-    // v0.1 supports plain Latin/Cyrillic word tests. Fail closed on code/newline/other scripts.
-    if (target.length > 100 || !/^[a-zа-яё]+$/iu.test(target)) {
-      session = null; disabledForTest = true; status = 'Нужен тест словами RU / EN'; paint(); return;
+    // Accept supported quote tokens; never broaden collection beyond the test input.
+    if (!core.supportedToken(target)) {
+      session = null; disabledForTest = true; status = 'Неподдерживаемые символы в тексте'; paint(); return;
     }
     const value = event.target.value;
     if (!value.startsWith(' ') || !node.hasAttribute('data-wordindex')) {
@@ -105,10 +105,11 @@
       if (!['time', 'words', 'custom', 'quote'].includes(testMode)) { status = 'Режим не поддерживается'; paint(); return; }
       // Never collect a partial session when enabled or installed midway through a test.
       if (node.getAttribute('data-wordindex') !== '0' || value !== ' ' || deleting) { status = 'Начните новый тест'; paint(); return; }
-      session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, language: /[а-яё]/iu.test(target) ? 'russian' : 'english',
+      session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
         layout: settings.layout, mode: testMode, events: [] };
-      if(trainingPlan && testMode==='custom' && trainingPlan.layout===settings.layout && trainingPlan.language===session.language)session.training={id:trainingPlan.id,kind:trainingPlan.kind,targets:trainingPlan.targets,seconds:trainingPlan.seconds};
+      if(trainingPlan && testMode==='custom' && trainingPlan.layout===settings.layout && trainingPlan.language===session.language)session.training={id:trainingPlan.id,kind:trainingPlan.kind,targets:trainingPlan.targets,seconds:trainingPlan.seconds,...(trainingPlan.wordCount ? {wordCount:trainingPlan.wordCount} : {})};
     }
+    if (!trainingPlan && /[а-яё]/iu.test(target)) session.language = 'russian';
     const wordIndex=Number(node.getAttribute('data-wordindex'));
     session.maxWordIndex=Math.max(session.maxWordIndex??0,wordIndex);
     if(session.training && trainingPlan.words[wordIndex]!==target)delete session.training;
