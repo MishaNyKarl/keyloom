@@ -93,7 +93,7 @@ select, .custom-grid input, #sync-form input, textarea { border-color: var(--sur
 .notice { padding: 10px 0; background: transparent; color: var(--muted); border: 0; }
 .page-footer { border-top: 1px solid var(--surface); margin-top: 35px; padding: 20px 0; }
 .daily-section { padding: 0 0 28px; margin: 32px 0; border-bottom: 1px solid var(--surface); }
-.daily-steps { padding-left: 24px; }
+.daily-steps { padding-left: 4.5em; }
 .daily-milestones { gap: 15px; }
 #practice-dialog { background: var(--bg); border: 1px solid var(--border); box-shadow: none; }
 .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -190,3 +190,8 @@ button, input, select, textarea,
   outline: 2px solid var(--text);
   outline-offset: 2px;
 }
+
+.daily-steps li::marker { font-variant-numeric: tabular-nums; }
+.daily-route > summary { cursor: pointer; color: var(--muted); }
+.daily-history-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 1em; }
+.daily-history-picker select { max-width: 100%; }

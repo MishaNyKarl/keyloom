@@ -432,6 +432,46 @@
   function activeDaily() {
     return (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout).at(-1);
   }
+  function renderPlanSteps(list, plan) {
+    list.replaceChildren();
+    const next = plan.steps.find(step => !step.result);
+    for (const step of plan.steps) {
+      const item = document.createElement('li');
+      item.dataset.state = step.result ? 'done' : step === next ? 'next' : 'waiting';
+      item.textContent = `${step.result ? '✓ ' : ''}${step.language === 'russian' ? 'RU' : 'EN'} · ${step.label} · ≈ ${format(step.seconds / 60, 1)} мин`;
+      if (step.targets?.length) item.textContent += ' · ' + step.targets.join(' · ');
+      if (step.result) item.textContent += ` → ${format(step.result.wpm, 1)} WPM · ${format(step.result.accuracy, 1)}% · ${format(step.result.duration, 1)} с`;
+      list.append(item);
+    }
+  }
+  function renderDailyHistory() {
+    const select = $('daily-history-date');
+    const selected = select.value;
+    const plans = (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout)
+      .slice().sort((a, b) => b.date - a.date);
+    select.replaceChildren();
+    for (const plan of plans) {
+      const option = document.createElement('option');
+      option.value = plan.id;
+      const date = new Date(plan.date).toLocaleString('ru-RU', {dateStyle:'short', timeStyle:'short'});
+      const language = plan.prefs.languages === 'both' ? 'EN + RU' : plan.prefs.languages === 'russian' ? 'RU' : 'EN';
+      option.textContent = date + ' · ' + language + ' · ' + plan.prefs.minutes + ' мин';
+      select.append(option);
+    }
+    select.disabled = !plans.length;
+    if (plans.some(plan => plan.id === selected)) select.value = selected;
+    const plan = plans.find(plan => plan.id === select.value) ?? plans[0];
+    $('daily-history-steps').replaceChildren();
+    if (!plan) {
+      $('daily-history-status').textContent = 'Сохранённых планов пока нет. Составь первый план выше.';
+      return;
+    }
+    const completed = plan.steps.filter(step => step.result);
+    const minutes = completed.reduce((sum, step) => sum + step.result.duration, 0) / 60;
+    $('daily-history-status').textContent = completed.length + ' / ' + plan.steps.length +
+      ' заданий выполнено · ' + format(minutes, 1) + ' мин печати';
+    renderPlanSteps($('daily-history-steps'), plan);
+  }
   function renderDaily() {
     const daily = activeDaily();
     const prefs = daily?.prefs ?? state.dailyPrefs ?? KeyloomDaily.options();
@@ -446,27 +486,10 @@
       ['До нормы', format(Math.max(0, prefs.minutes - progress.minutes), 1), 'мин', 'Отдых и переключения не учитываются']
     ]);
     $('daily-steps').replaceChildren();
-    const comparisons = KeyloomDaily.comparisons(daily);
-    metricCards($('daily-comparison'), comparisons.map(row => [
-      row.language === 'russian' ? 'Русский' : 'English',
-      `${format(row.before, 1)} → ${format(row.after, 1)}`, 'с',
-      `${row.saved >= 0 ? 'Быстрее' : 'Дольше'} на ${format(Math.abs(row.saved), 1)} с · точность ${format(row.beforeAccuracy, 1)}% → ${format(row.afterAccuracy, 1)}%`
-    ]));
-    if (!comparisons.length) {
-      $('daily-comparison').textContent = daily?.steps.some(step => step.type === 'warmup')
-        ? 'Сравнение появится после повторного текста каждого языка.'
-        : 'Составь новый план, чтобы добавить разминку и повтор текста.';
-    }
+    renderDailyHistory();
     const next = daily?.steps.find(step => !step.result);
     if (daily) {
-      for (const step of daily.steps) {
-        const item = document.createElement('li');
-        item.dataset.state = step.result ? 'done' : step === next ? 'next' : 'waiting';
-        item.textContent = `${step.result ? '✓ ' : ''}${step.language === 'russian' ? 'RU' : 'EN'} · ${step.label} · ≈ ${format(step.seconds / 60, 1)} мин`;
-        if (step.targets?.length) item.textContent += ' · ' + step.targets.join(' · ');
-        if (step.result) item.textContent += ` → ${format(step.result.wpm, 1)} WPM · ${format(step.result.accuracy, 1)}% · ${format(step.result.duration, 1)} с`;
-        $('daily-steps').append(item);
-      }
+      renderPlanSteps($('daily-steps'), daily);
       const duration = daily.steps.reduce((sum, step) => sum + step.seconds, 0) / 60;
       $('daily-status').textContent = `${new Date(daily.date).toLocaleDateString('ru-RU')} · примерно ${format(duration, 1)} минут. ` +
         (next ? 'Запусти выделенный шаг. Затем нажимай «Следующее задание» прямо на Monkeytype; прогресс сохраняется автоматически.' :
@@ -560,6 +583,7 @@
     const search = $('vocabulary-search').value.trim().toLowerCase();
     chips($('vocabulary-words'), words.filter(word => word.includes(search)).slice(0, 50));
   }
+  $('daily-history-date').addEventListener('change', renderDailyHistory);
   $('daily-template').addEventListener('change', () => {
     const template = $('daily-template').value;
     const prefs = KeyloomDaily.options();
