@@ -73,6 +73,9 @@
     chips($('focus-chips'), focus.map(row => row.key));
     renderChart(); renderWeaknesses(); renderKeyboard(); renderHistory();
     $('practice-language').value=$('language').value;
+    for (const choice of document.querySelectorAll('input[name="header-language"]')) {
+      choice.checked = choice.value === $('language').value;
+    }
     if (!exercise || exercise.language !== $('language').value || exercise.layout !== state.settings.layout) {
       $('practice-kind').value = currentCustom().kind ?? 'pairs';
       if (currentCustom().seconds) $('practice-duration').value = String(currentCustom().seconds);
@@ -814,6 +817,13 @@
       showView('settings'); document.querySelector('input[name="keyloom-theme"]:checked')?.focus();
     }}
   ]});
+  for (const choice of document.querySelectorAll('input[name="header-language"]')) {
+    choice.addEventListener('change', () => {
+      if (!choice.checked) return;
+      $('language').value = choice.value;
+      $('language').dispatchEvent(new Event('change'));
+    });
+  }
   $('open-commands').addEventListener('click', commandMenu.open);
   showView(location.hash.slice(1)); void load();
 })();

@@ -132,6 +132,26 @@
     const words = [...dictionary, ...KeyloomLearning.vocabulary(learning, step.language, daily.layout)];
     const seconds = [30,60,120,180,300].reduce((best, value) =>
       Math.abs(value - step.seconds) < Math.abs(best - step.seconds) ? value : best, 30);
+    if (step.type === 'repair' && targets.length) {
+      const selected = targets.filter(word => KeyloomCore.validTarget('words', word));
+      if (selected.length) {
+        const repeated = selected.flatMap(word => Array(2 + Math.floor(random() * 2)).fill(word));
+        // The capture contract requires at least ten words. Fill short repairs
+        // with neutral vocabulary without adding more target repetitions.
+        const fillers = [...new Set(words)].filter(word =>
+          !selected.includes(word) && alphabet.test(word) && KeyloomCore.supportedToken(word));
+        const fallback = step.language === 'russian' ? ['дом','мир','день','путь','свет','время','дело','рука','окно','город','место','жизнь','вода'] :
+          ['home','world','day','way','light','time','work','hand','window','city','place','life','water'];
+        for (const word of fallback) if (!selected.includes(word)) fillers.push(word);
+        while (repeated.length < 10) repeated.push(fillers[repeated.length % fillers.length]);
+        for (let index = repeated.length - 1; index > 0; index--) {
+          const swap = Math.floor(random() * (index + 1));
+          [repeated[index], repeated[swap]] = [repeated[swap], repeated[index]];
+        }
+        return {id:crypto.randomUUID(), date:Date.now(), ...scope, seconds, kind:'words',
+          targets:selected, words:repeated, wordCount:repeated.length};
+      }
+    }
     return KeyloomAnalytics.plan(sessions, words, {...scope, seconds, kind, manualTargets:targets,
       ratio:prefs.goal === 'accuracy' ? 1 : .75, random,
       extras:{digits:prefs.numbers, punctuation:prefs.punctuation, uppercase:prefs.goal === 'text'}});

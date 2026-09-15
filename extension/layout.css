@@ -155,3 +155,38 @@ button, input, select, textarea,
 .sidebar .nav-item, .primary, .secondary, .text-button {
   font-size: 1em;
 }
+
+.header-language {
+  display: flex;
+  align-items: center;
+  gap: .75em;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: .875rem;
+}
+.language-toggle {
+  display: flex;
+  padding: .25em;
+  border-radius: .5rem;
+  background: var(--panel);
+}
+.language-toggle label { position: relative; cursor: pointer; }
+.language-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.language-toggle span {
+  display: block;
+  padding: .5em .75em;
+  border-radius: .3rem;
+}
+.language-toggle input:checked + span {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.language-toggle input:focus-visible + span {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}

@@ -126,7 +126,18 @@
     </div>
   </aside>
   <main>
-    <header class="topbar"><span>твой ритм / keyloom</span><div class="top-controls"><span id="environment" class="environment"></span><label class="select-label">Язык<select id="language"><option value="english">English</option><option value="russian">Русский</option></select></label><button type="button" id="open-commands" class="text-button" aria-keyshortcuts="Alt+K">⌘ команды <kbd>Alt+K</kbd></button></div></header>
+    <header class="topbar">
+      <button type="button" id="open-commands" class="text-button" aria-keyshortcuts="Alt+K">⌘ команды <kbd>Alt+K</kbd></button>
+      <span id="environment" class="environment" hidden></span>
+      <div class="header-language">
+        <span id="header-language-label">Язык:</span>
+        <div class="language-toggle" role="radiogroup" aria-labelledby="header-language-label">
+          <label><input type="radio" name="header-language" value="english" checked><span>English</span></label>
+          <label><input type="radio" name="header-language" value="russian"><span>Русский</span></label>
+        </div>
+        <select id="language" hidden aria-label="Язык"><option value="english">English</option><option value="russian">Русский</option></select>
+      </div>
+    </header>
     <div id="demo-banner" class="notice" hidden>Демонстрационные данные · это пример интерфейса, а не твои результаты. <a href="dashboard.html">Вернуться к своим данным →</a></div>
     <div id="preview-banner" class="notice" hidden>Это предпросмотр. Запись тестов работает после установки расширения в Chrome или Edge.</div>
     <div class="page-content">

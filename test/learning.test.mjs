@@ -103,6 +103,14 @@ test('both repair uses errors and slow words from the preceding test', () => {
   assert.ok(exercise.targets.includes('errorword'));
   assert.ok(exercise.targets.includes('slowword'));
   assert.equal(exercise.targets.includes('fastword'),false);
+  for (const word of ['errorword', 'slowword']) {
+    assert.equal(exercise.words.filter(value => value === word).length, 2);
+  }
+  const triple = d.exercise(plan,step,[source],l.ingest(null,[source]),['fastword'],()=>.9);
+  for (const word of ['errorword', 'slowword']) {
+    assert.equal(triple.words.filter(value => value === word).length, 3);
+  }
+  assert.equal(context.KeyloomAnalytics.validPlan(triple),true);
   assert.equal(context.KeyloomAnalytics.validPlan(exercise),true);
 });
 
