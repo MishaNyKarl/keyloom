@@ -15,7 +15,7 @@ async function harness(training=null, firefox=false, daily=null, today=null) {
   const element = () => ({ shown:true, style:{},textContent:'',
     closest(selector) { return selector === '.hidden' && !this.shown ? this : null; },
     getClientRects() { return this.shown ? [1] : []; },
-    addEventListener(name,cb){this[name]=cb;},setAttribute(){},contains(){return false;},append(){} });
+    addEventListener(name,cb){this[name]=cb;},setAttribute(){},contains(){return false;},append(){},prepend(){} });
   const typing = element(), result = element(), badge = element(); result.shown = false;
   const input = {id:'wordsInput',value:' '};
   const newWord = () => ({ getAttribute:()=> String(wordIndex), hasAttribute:()=>true,

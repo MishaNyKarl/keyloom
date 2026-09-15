@@ -328,3 +328,17 @@ test('today progress exposes only counts and estimated unfinished minutes', asyn
   assert.equal((await h.send({type:'GET_TODAY_PROGRESS'})).today, null);
   assert.equal(await h.send({type:'GET_TODAY_PROGRESS'},'https://example.com/'), undefined);
 });
+
+test('quick warmup starts independently of daily plan and validates language', async () => {
+  const h = await harness();
+  const reply = await h.send({type:'START_WARMUP',language:'russian'});
+  assert.equal(reply.started, true);
+  assert.equal(h.updated.at(-1).id, 7);
+  assert.equal(h.storage.exercises[0].language, 'russian');
+  assert.ok([30,60,120].includes(h.storage.exercises[0].seconds));
+  assert.equal(new URL(h.updated.at(-1).url).searchParams.has('keyloomDaily'), false);
+  assert.equal(h.storage.dailies, undefined);
+  assert.equal((await h.send({type:'START_WARMUP',language:'unknown'})).ok, false);
+  h.storage.settings.enabled = false;
+  assert.equal((await h.send({type:'START_WARMUP',language:'english'})).ok, false);
+});

@@ -56,6 +56,25 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       dailies = [], dailyPrefs, theme } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs', 'theme']);
     const learning = savedLearning ?? KeyloomLearning.ingest(null, sessions);
     if (!savedLearning) await extensionApi.storage.local.set({learning});
+    if (message.type === 'START_WARMUP') {
+      if (!settings.enabled) throw new Error('Включите запись тестов перед тренировкой');
+      const language = message.language;
+      if (!['english','russian'].includes(language)) throw new Error('Выберите English или Русский');
+      if (fromMonkeytype && !Number.isInteger(sender.tab?.id)) throw new Error('Не удалось определить вкладку');
+      const dictionary = [...KeyloomWords[language], ...KeyloomLearning.vocabulary(learning, language, settings.layout)];
+      const plan = KeyloomAnalytics.warmup(sessions, dictionary, language, settings.layout);
+      if (!KeyloomAnalytics.validPlan(plan)) throw new Error('Не удалось подготовить разминку');
+      await extensionApi.storage.local.set({exercises:[...exercises, plan].slice(-40)});
+      const destination = {url:KeyloomPractice.url(plan.words, language, plan.id)};
+      try {
+        if (fromMonkeytype) await extensionApi.tabs.update(sender.tab.id, destination);
+        else await extensionApi.tabs.create(destination);
+      } catch (error) {
+        await extensionApi.storage.local.set({exercises});
+        throw error;
+      }
+      return {started:true};
+    }
     if (message.type === 'GET_TODAY_PROGRESS') {
       return {today:KeyloomDaily.todaySummary(dailies, settings.layout)};
     }

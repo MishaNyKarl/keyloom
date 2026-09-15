@@ -30,10 +30,9 @@
       const open = document.createElement('button');
       open.id = 'keyloom-open-app';
       open.type = 'button';
-      const daily = location.search?.includes('keyloomDaily=');
-      open.textContent = daily ? 'К ежедневному плану' : 'Открыть Keyloom';
+      open.textContent = 'Открыть Keyloom';
       open.addEventListener('click', () => {
-        void send({ type: 'OPEN_DASHBOARD', ...(daily ? {view:'daily'} : {}) }).catch(() => {});
+        void send({ type: 'OPEN_DASHBOARD' }).catch(() => {});
       });
       nextButton = document.createElement('button');
       nextButton.id = 'keyloom-next-step';
@@ -53,10 +52,10 @@
       progressPanel.id = 'keyloom-progress';
       progressPanel.setAttribute('role', 'status');
       progressPanel.setAttribute('aria-live', 'polite');
-      document.body.append(progressPanel);
+      widget.prepend(progressPanel);
     }
     if (widget.isConnected === false) document.body.append(widget);
-    if (progressPanel.isConnected === false) document.body.append(progressPanel);
+    if (progressPanel.isConnected === false) widget.prepend(progressPanel);
     widget.setAttribute('data-typing', String(Boolean(session)));
     widget.inert = Boolean(session);
     widget.setAttribute('data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
@@ -217,6 +216,9 @@
           document.activeElement.id === 'wordsInput' ||
           document.activeElement.closest?.('#keyloom-command-menu')),
       commands: [
+        {label:'Разогреть пальчики', alias:'warmup разминка ошибки',
+          run:() => pendingSave.then(() => send({type:'START_WARMUP',
+            language:KeyloomConfiguration.read(document).language ?? trainingPlan?.language ?? 'english'}))},
         {label:'Следующее задание', alias:'next daily lesson', key:'KeyN',
           available:() => settings.enabled && Boolean(dailyState) && !dailyState.completed && !advancing,
           run:advance},

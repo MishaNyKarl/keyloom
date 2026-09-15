@@ -93,3 +93,15 @@ test('keyboard scale handles empty, equal and exact boundary values', () => {
   const scale = a.keyboardScale([0, .25, .5, .75, 1].map(errorRate => ({attempts:5,errorRate})));
   assert.deepEqual(Array.from(scale.levels), [0, 1, 2, 3, 3]);
 });
+
+test('quick warmups choose supported durations and target types', () => {
+  const kinds = new Set(), durations = new Set();
+  for (const random of [0, .5, .99]) {
+    const plan = a.warmup([], ['street','strong','string','tree'], 'english','default', () => random);
+    assert.equal(a.validPlan(plan), true);
+    kinds.add(plan.kind);
+    durations.add(plan.seconds);
+  }
+  assert.deepEqual([...kinds], ['pairs','sequences','words']);
+  assert.deepEqual([...durations], [30,60,120]);
+});

@@ -805,6 +805,11 @@
     ...[['overview','Обзор'],['practice','Прицельная практика'],['daily','Ежедневный план'],
       ['statistics','Статистика'],['history','История'],['settings','Настройки']]
       .map(([view,label]) => ({label,alias:view,run:() => navigate(view)})),
+    {label:'Разогреть пальчики',alias:'warmup разминка ошибки',
+      run:async () => {
+        if (!installed || demo) throw new Error('Запуск разминки доступен в установленном расширении вне деморежима');
+        await message({type:'START_WARMUP',language:$('language').value});
+      }},
     {label:'Продолжить сегодняшний план',alias:'start next daily сегодня создать продолжить',
       run:async () => {
         if (!installed || demo) { navigate('daily'); return; }

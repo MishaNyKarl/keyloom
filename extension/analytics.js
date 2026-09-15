@@ -124,6 +124,15 @@
     ticks.push(Number(max.toFixed(6)));
     return { min, max, ticks };
   }
+  function warmup(sessions, dictionary, language, layout, random = Math.random) {
+    const profile = KeyloomCore.profile(sessions, {language, layout});
+    const kinds = ['pairs', 'sequences', 'words'];
+    const weak = kinds.filter(kind => profile[kind].some(row => row.reliable && row.score > 0));
+    const choices = weak.length ? weak : kinds;
+    const kind = choices[Math.floor(random() * choices.length)];
+    const seconds = [30, 60, 120][Math.floor(random() * 3)];
+    return plan(sessions, dictionary, {language, layout, kind, seconds, ratio:1, random});
+  }
   function keyboardScale(rows) {
     const valid = rows.map(row => row && Number.isFinite(row.attempts) &&
       row.attempts >= 5 && Number.isFinite(row.errorRate) &&
@@ -140,5 +149,5 @@
     }));
     return {min, max, levels, bins};
   }
-  globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan,chartScale,keyboardScale});
+  globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan,chartScale,keyboardScale,warmup});
 })();

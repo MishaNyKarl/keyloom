@@ -121,7 +121,7 @@
 html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important; }
 #keyloom-panel[data-typing=true] { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) { #keyloom-panel { transition: opacity .15s; } }
-#keyloom-widget, #keyloom-progress {
+#keyloom-widget {
   position: fixed;
   bottom: 16px;
   left: 50%;
@@ -135,20 +135,20 @@ html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important
   font: .5em/1.25 var(--mono);
 }
 @media (min-width: 768px) {
-  #keyloom-widget, #keyloom-progress {
+  #keyloom-widget {
     --keyloom-bar-padding-x: .45em;
     --keyloom-bar-padding-y: .75rem;
     font-size: .6em;
   }
 }
 @media (min-width: 1024px) {
-  #keyloom-widget, #keyloom-progress {
+  #keyloom-widget {
     --keyloom-bar-padding-x: .5em;
     font-size: .75em;
   }
 }
 @media (min-width: 1280px) {
-  #keyloom-widget, #keyloom-progress { --keyloom-bar-padding-x: 1em; }
+  #keyloom-widget { --keyloom-bar-padding-x: 1em; }
 }
 #keyloom-panel {
   box-sizing: border-box;
@@ -254,11 +254,9 @@ body:has(#keyloom-widget) .full-width:has(> #ad-result-wrapper) {
 }
 
 #keyloom-progress {
-  top: 5rem;
-  right: 2rem;
-  bottom: auto;
-  left: auto;
-  transform: none;
+  font: inherit;
+  margin-bottom: .5rem;
+  text-align: center;
   padding: var(--keyloom-bar-padding-y) calc(2 * var(--keyloom-bar-padding-x));
   border-radius: var(--roundness, .5rem);
   background: var(--sub-alt-color, var(--panel));
