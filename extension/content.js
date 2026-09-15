@@ -52,10 +52,10 @@
       progressPanel.id = 'keyloom-progress';
       progressPanel.setAttribute('role', 'status');
       progressPanel.setAttribute('aria-live', 'polite');
-      widget.prepend(progressPanel);
+      document.body.append(progressPanel);
     }
     if (widget.isConnected === false) document.body.append(widget);
-    if (progressPanel.isConnected === false) widget.prepend(progressPanel);
+    if (progressPanel.isConnected === false) document.body.append(progressPanel);
     widget.setAttribute('data-typing', String(Boolean(session)));
     widget.inert = Boolean(session);
     widget.setAttribute('data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
