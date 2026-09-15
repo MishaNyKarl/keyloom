@@ -7,6 +7,7 @@
   let settings = { enabled: false, layout: 'default' }, session = null, firstNode = null;
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
+  let dailyState = null, nextButton, advancing = false;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -36,11 +37,33 @@
       open.addEventListener('click', () => {
         void send({ type: 'OPEN_DASHBOARD', ...(daily ? {view:'daily'} : {}) }).catch(() => {});
       });
-      panel.append(badge, open);
+      nextButton = document.createElement('button');
+      nextButton.id = 'keyloom-next-step';
+      nextButton.type = 'button';
+      nextButton.style.cssText = open.style.cssText;
+      nextButton.addEventListener('click', async () => {
+        if (advancing || session || !dailyState || dailyState.completed) return;
+        advancing = true;
+        status = 'Открываю следующее задание…';
+        paint();
+        try {
+          await send({type:'NEXT_DAILY'});
+        } catch (error) {
+          advancing = false;
+          status = 'Не удалось перейти: ' + error.message;
+          paint();
+        }
+      });
+      panel.append(badge, open, nextButton);
       document.body.append(panel);
     }
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;
+    nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
+    nextButton.disabled = advancing;
+    const nextLabel = advancing ? 'Открываю…' : 'Следующее задание →';
+    if (nextButton.textContent !== nextLabel) nextButton.textContent = nextLabel;
+    nextButton.title = dailyState?.nextLabel ?? '';
   }
   function targetText(node) {
     return Array.from(node.querySelectorAll('letter:not(.extra)')).map(l => l.textContent).join('').normalize('NFC');
@@ -62,10 +85,12 @@
     // Persist aggregates only. Raw input and the full test text never leave this content script.
     pendingSave=send({ type: 'SAVE_SESSION', session: result, configuredSeconds:finished.configuredSeconds }).then(reply => {
       if(reply.saved)lastSavedId=result.id;
+      dailyState = reply.daily ?? null;
       if (session) return; // A delayed save response must not overwrite a new test's status.
       status = 'На паузе';
       if (reply.saved) {
         status = statusValue === 'completed' ? 'Тест сохранён' : 'Тест прерван';
+        if (dailyState?.completed) status = 'Ежедневный план завершён!';
         if (statusValue === 'completed' && reply.dailyStep === 'mismatch') {
           status = 'Тест сохранён · шаг не засчитан: открой его из плана';
         }
@@ -157,7 +182,13 @@
     check();
   }
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount, { once: true });
-  void send({ type: 'GET_STATE' }).then(state => { settings = state.settings; trainingPlan=state.training??null; paint(); }).catch(() => {});
+  void send({ type: 'GET_STATE' }).then(state => {
+    settings = state.settings;
+    trainingPlan = state.training ?? null;
+    dailyState = state.daily ?? null;
+    if (dailyState?.completed) status = 'Ежедневный план завершён!';
+    paint();
+  }).catch(() => {});
   extensionApi.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.settings) return;
     settings = changes.settings.newValue;

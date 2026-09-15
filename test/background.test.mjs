@@ -12,12 +12,12 @@ async function harness(firefox = false) {
   const context = vm.createContext({ crypto: webcrypto, TextEncoder, TextDecoder, AbortSignal, console, URL, structuredClone });
   const scripts = Object.fromEntries(await Promise.all(['core.js','analytics.js','learning.js','daily.js','words.js','vendor/lz-string.js','practice.js','sync.js'].map(async name=>[name,await readFile(new URL('../extension/'+name,import.meta.url),'utf8')])));
   context.importScripts = (...names) => names.forEach(name=>vm.runInContext(scripts[name], context));
-  const opened=[];
+  const opened=[], updated=[];
   context.chrome = {
     permissions: { contains: async () => true },
     runtime: { id: 'test-extension', getURL: path => `chrome-extension://test-extension/${path}`, onMessage: { addListener: fn => handler = fn } },
     storage: { local: { get: async () => structuredClone(storage), set: async values => Object.assign(storage, structuredClone(values)) } },
-    tabs: { create: async options => {opened.push(options.url);return { id: 1 };} },
+    tabs: { update: async (id, options) => { updated.push({id, ...options}); }, create: async options => {opened.push(options.url);return { id: 1 };} },
   };
   if (firefox) {
     context.browser = context.chrome;
@@ -29,8 +29,8 @@ async function harness(firefox = false) {
     }
   }
   vm.runInContext(source, context);
-  const send = (message, url = 'https://monkeytype.com/') => new Promise(resolve => {
-    const keep = handler(message, { id: 'test-extension', url }, resolve);
+  const send = (message, url = 'https://monkeytype.com/', tab = {id:7}) => new Promise(resolve => {
+    const keep = handler(message, { id: 'test-extension', url, tab }, resolve);
     if (!keep) resolve(undefined);
   });
   const session = id => context.KeyloomCore.analyze([
@@ -38,7 +38,7 @@ async function harness(firefox = false) {
     {target:'cat',wordIndex:0,position:1,typed:'a',type:'insert',time:120},
     {target:'cat',wordIndex:0,position:2,typed:'t',type:'insert',time:230},
   ], {id});
-  return { storage, send, session, opened, context };
+  return { storage, send, session, opened, updated, context };
 }
 test('concurrent tabs cannot overwrite each other or duplicate results', async () => {
   const {storage,send,session} = await harness();
@@ -194,3 +194,36 @@ test('learning migration, old backup import and invalid learning import preserve
   assert.equal(JSON.stringify(h.storage),original);
   assert.equal((await h.send({type:'IMPORT',sessions:[h.session('old-backup')]},page)).ok,true);
 });
+
+for (const firefox of [false, true]) {
+  test('daily continuation uses the same tab and rejects skips: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const api = h.context[firefox ? 'browser' : 'chrome'];
+    const page = api.runtime.getURL('dashboard.html');
+    const {plan} = await h.send({type:'CREATE_DAILY', options:{languages:'english',
+      repeat:false, repair:true, quote:false}}, page);
+    await h.send({type:'START_DAILY', id:plan.id}, page);
+    const url = h.opened.at(-1);
+    assert.equal((await h.send({type:'NEXT_DAILY'}, url)).ok, false);
+    const first = h.storage.dailies[0].steps[0];
+    const session = {...h.session('next-result'), mode:'time', duration:60, date:first.startedAt+1};
+    const saved = await h.send({type:'SAVE_SESSION', session}, url);
+    assert.ok(saved.daily.nextLabel);
+    assert.equal((await h.send({type:'NEXT_DAILY'}, url, null)).ok, false);
+    assert.equal((await h.send({type:'NEXT_DAILY'}, 'https://monkeytype.com/')).ok, false);
+    const update = api.tabs.update;
+    api.tabs.update = async () => { throw new Error('Tab unavailable'); };
+    assert.equal((await h.send({type:'NEXT_DAILY'}, url)).ok, false);
+    assert.equal(h.storage.dailies[0].steps[1].startedAt, undefined);
+    assert.equal(h.storage.dailies[0].steps[0].result.id, 'next-result');
+    api.tabs.update = update;
+    const replies = await Promise.all([h.send({type:'NEXT_DAILY'}, url), h.send({type:'NEXT_DAILY'}, url)]);
+    assert.equal(replies.filter(row => row.ok).length, 1);
+    assert.equal(h.updated.length, 1);
+    assert.equal(h.updated[0].id, 7);
+    assert.equal(h.opened.length, 1);
+    assert.equal(new URL(h.updated[0].url).searchParams.get('keyloomStep'), plan.steps[1].id);
+    assert.ok(new URL(h.updated[0].url).searchParams.get('keyloomExercise'));
+    assert.equal((await h.send({type:'NEXT_DAILY'}, h.updated[0].url)).ok, false);
+  });
+}

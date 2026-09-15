@@ -5,6 +5,15 @@ const extensionApi = globalThis.browser ?? globalThis.chrome;
 const defaults = { enabled: true, layout: 'default' };
 // Serialize read-modify-write operations from multiple Monkeytype tabs.
 let queue = Promise.resolve();
+function dailyContinuation(dailies, url) {
+  const params = new URL(url).searchParams;
+  const daily = dailies.find(plan => plan.id === params.get('keyloomDaily'));
+  const index = daily?.steps.findIndex(step => step.id === params.get('keyloomStep')) ?? -1;
+  if (index < 0 || !daily.steps[index].result) return null;
+  const next = daily.steps.find(step => !step.result);
+  if (next && next !== daily.steps[index + 1]) return null;
+  return { nextLabel: next?.label ?? null, completed: !next };
+}
 function syncPermissions(config) {
   return { origins: ['https://' + new URL(config.url).hostname + '/*'],
     ...(extensionApi.runtime.getManifest?.().browser_specific_settings?.gecko
@@ -51,7 +60,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       const { syncConfig, syncStatus } = fromExtension
         ? await extensionApi.storage.local.get(['syncConfig', 'syncStatus']) : {};
       const sync = { enabled: Boolean(syncConfig?.enabled), url: syncConfig?.url ?? '', ...syncStatus };
-      return { sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null}) };
+      return { sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null, daily:dailyContinuation(dailies, sender.url)}) };
     }
     if (message.type === 'SAVE_SESSION' && fromMonkeytype) {
       if (!settings.enabled) return { ignored: true };
@@ -73,7 +82,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       if (new URL(sender.url).searchParams.has('keyloomDaily')) {
         dailyStep = updatedDailies.some(plan => plan.steps.some(step => step.result?.id === incoming.id)) ? 'completed' : 'mismatch';
       }
-      return { saved: true, dailyStep };
+      return { saved: true, dailyStep, daily:dailyContinuation(updatedDailies, sender.url) };
     }
     if (message.type === 'OPEN_DASHBOARD') {
       const result=sessions.find(s=>s.id===message.sessionId);
@@ -86,7 +95,8 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       await extensionApi.tabs.create({ url: extensionApi.runtime.getURL('dashboard.html')+suffix });
       return { opened: true };
     }
-    if (!fromExtension) throw new Error('Недоступная операция');
+    const continuing = message.type === 'NEXT_DAILY' && fromMonkeytype;
+    if (!fromExtension && !continuing) throw new Error('Недоступная операция');
     if (message.type === 'CREATE_DAILY') {
       const plan = KeyloomDaily.create(message.options, sessions, settings.layout);
       if (plan.prefs.targets) {
@@ -97,12 +107,18 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       await extensionApi.storage.local.set({dailies:[...dailies, plan].slice(-30), dailyPrefs:plan.prefs});
       return {plan};
     }
-    if (message.type === 'START_DAILY') {
+    if (message.type === 'START_DAILY' || continuing) {
       if (!settings.enabled) throw new Error('Включите запись тестов перед тренировкой');
-      const daily = dailies.find(plan => plan.id === message.id);
+      const params = continuing ? new URL(sender.url).searchParams : null;
+      if (continuing && (!Number.isInteger(sender.tab?.id) || !dailyContinuation(dailies, sender.url))) {
+        throw new Error('Сначала завершите текущий шаг плана');
+      }
+      const daily = dailies.find(plan => plan.id === (continuing ? params.get('keyloomDaily') : message.id));
       if (!daily || daily.layout !== settings.layout) throw new Error('План не найден для текущей раскладки');
       const step = daily.steps.find(row => !row.result);
       if (!step) throw new Error('Все шаги плана уже завершены');
+      if (continuing && step.startedAt) throw new Error('Следующий шаг уже запущен. Откройте план, чтобы повторить его');
+      const previousDailies = structuredClone(dailies);
       let url;
       let updatedExercises = exercises;
       if (['time','quote'].includes(step.type)) {
@@ -118,8 +134,15 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       }
       step.startedAt = Date.now();
       await extensionApi.storage.local.set({dailies, exercises:updatedExercises});
-      await extensionApi.tabs.create({url:url + '&keyloomDaily=' + encodeURIComponent(daily.id) +
-        '&keyloomStep=' + encodeURIComponent(step.id)});
+      const destination = {url:url + '&keyloomDaily=' + encodeURIComponent(daily.id) +
+        '&keyloomStep=' + encodeURIComponent(step.id)};
+      try {
+        if (continuing) await extensionApi.tabs.update(sender.tab.id, destination);
+        else await extensionApi.tabs.create(destination);
+      } catch (error) {
+        await extensionApi.storage.local.set({dailies:previousDailies, exercises});
+        throw error;
+      }
       return {started:true};
     }
     if (message.type === 'CONNECT_SYNC') {

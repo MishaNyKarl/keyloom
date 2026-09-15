@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
 // Executes the actual content script; only DOM and Chrome transport are simulated.
-async function harness(training=null, firefox=false) {
+async function harness(training=null, firefox=false, daily=null) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
@@ -36,7 +36,7 @@ async function harness(training=null, firefox=false) {
     chrome:{runtime:{async sendMessage(message){
       messages.push(message);
       if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training};
-      if(message.type==='SAVE_SESSION'){saves.push(message.session);return {ok:true,saved:true};}
+      if(message.type==='SAVE_SESSION'){saves.push(message.session);return {ok:true,saved:true,daily};}
       return {ok:true};
     }},storage:{onChanged:{addListener(){}}}},
   });
@@ -143,4 +143,30 @@ test('explicit app button opens overview without a training result', async () =>
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.messages.at(-1).type, 'OPEN_DASHBOARD');
   assert.equal(h.messages.at(-1).sessionId, undefined);
+});
+
+test('next lesson appears after save and double click sends one command', async () => {
+  const h = await harness(null, false, {nextLabel:'Repair', completed:false});
+  const button = h.created.find(node => node.id === 'keyloom-next-step');
+  assert.equal(button.hidden, true);
+  h.type('street');
+  assert.equal(button.hidden, true);
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.equal(button.hidden, false);
+  assert.equal(button.title, 'Repair');
+  await button.click();
+  await button.click();
+  assert.equal(h.messages.filter(row => row.type === 'NEXT_DAILY').length, 1);
+  assert.equal(button.disabled, true);
+});
+test('last lesson displays completion and hides continuation', async () => {
+  const h = await harness(null, true, {completed:true});
+  h.type('street');
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.match(h.badge.textContent, /план завершён/);
+  assert.equal(h.created.find(node => node.id === 'keyloom-next-step').hidden, true);
 });
