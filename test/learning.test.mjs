@@ -108,6 +108,8 @@ test('both repair uses errors and slow words from the preceding test', () => {
 
 test('step completion requires matching launch and completed test and is idempotent', () => {
   const plan = d.create({repeat:false,repair:false,quote:false,languages:'english'},[],'default',now,'daily');
+  // Retain coverage for saved plans created before warmup steps existed.
+  plan.steps = plan.steps.filter(step => !['warmup','cooldown'].includes(step.type));
   const step = plan.steps[0];
   step.startedAt = now;
   const url = 'https://monkeytype.com/?keyloomDaily=daily&keyloomStep=' + step.id;
@@ -149,6 +151,7 @@ test('manual daily targets reject mixed scripts and wrong languages', () => {
 
 test('a completed configured minute test counts even when the last keystroke was early', () => {
   const plan = d.create({repeat:false,repair:false,quote:false,languages:'english'},[],'default',now,'paused');
+  plan.steps = plan.steps.filter(step => !['warmup','cooldown'].includes(step.type));
   plan.steps[0].startedAt = now;
   const url = 'https://monkeytype.com/?keyloomDaily=paused&keyloomStep=' + plan.steps[0].id;
   assert.ok(d.complete([plan],session('paused-result',{duration:40}),url,60)[0].steps[0].result);
@@ -173,4 +176,62 @@ test('transfer of digits is shared between languages like the review schedule', 
   assert.equal(result.ready,true);
   assert.equal(result.before.error,.2);
   assert.equal(result.after.error,.1);
+});
+
+test('every daily plan brackets each language with identical fixed warmup text', () => {
+  for (const minutes of [5,10,15,20,30,45]) {
+    for (const languages of ['english','russian','both']) {
+      for (const goal of ['balanced','speed','accuracy','text']) {
+        const plan = d.create({minutes,languages,goal},[],'default',now,'warmup');
+        assert.equal(plan.steps.reduce((sum,step) => sum + step.seconds,0),minutes * 60);
+        for (const language of languages === 'both' ? ['english','russian'] : [languages]) {
+          const steps = plan.steps.filter(step => step.language === language);
+          assert.equal(steps[0].type,'warmup');
+          assert.equal(steps.at(-1).type,'cooldown');
+          assert.equal(steps[0].seconds,30);
+          assert.deepEqual(steps[0].words,steps.at(-1).words);
+          const start = d.exercise(plan,steps[0],[],null,[],()=>.1);
+          const end = d.exercise(plan,steps.at(-1),[session('faster',{wpm:150})],null,[],()=>.9);
+          assert.ok(context.KeyloomAnalytics.validPlan(start));
+          assert.ok(context.KeyloomAnalytics.validPlan(end));
+          assert.deepEqual(start.words,end.words);
+          assert.notEqual(start.id,end.id);
+          assert.equal(start.wordCount,start.words.length);
+        }
+      }
+    }
+  }
+});
+test('warmup size follows language speed and comparison preserves slower results and accuracy', () => {
+  const plan = d.create({},[session('fast',{wpm:100})],'default',now,'compare');
+  const english = plan.steps.filter(step => step.language === 'english');
+  const russian = plan.steps.filter(step => step.language === 'russian');
+  assert.ok(english[0].words.join(' ').length > russian[0].words.join(' ').length);
+  assert.equal(d.comparisons(plan).length,0);
+  english[0].result = {duration:30,accuracy:99};
+  assert.equal(d.comparisons(plan).length,0);
+  english.at(-1).result = {duration:35,accuracy:97};
+  const result = d.comparisons(plan)[0];
+  assert.equal(result.before,30);
+  assert.equal(result.after,35);
+  assert.equal(result.saved,-5);
+  assert.equal(result.afterAccuracy,97);
+  english.at(-1).words = ['different'];
+  assert.equal(d.comparisons(plan).length,0);
+  assert.equal(d.comparisons({steps:[]}).length,0);
+});
+test('warmup completion requires its own exercise and rejects interrupted runs', () => {
+  const plan = d.create({languages:'english'},[],'default',now,'warmup');
+  const step = plan.steps[0];
+  step.startedAt = now;
+  step.exerciseId = 'warmup-exercise';
+  const url = 'https://monkeytype.com/?keyloomDaily=warmup&keyloomStep=' + step.id;
+  const result = session('warmup-result',{mode:'custom',duration:28,
+    training:{id:step.exerciseId,kind:'words',targets:[],seconds:30}});
+  for (const change of [{status:'abandoned'},{training:undefined},{training:{id:'wrong'}},{language:'russian'}]) {
+    assert.equal(d.complete([plan],{...result,...change},url)[0].steps[0].result,undefined);
+  }
+  const completed = d.complete([plan],result,url);
+  assert.equal(completed[0].steps[0].result.duration,28);
+  assert.equal(d.complete(completed,result,url)[0].steps.filter(step => step.result).length,1);
 });

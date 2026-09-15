@@ -422,6 +422,17 @@
       ['До нормы', format(Math.max(0, prefs.minutes - progress.minutes), 1), 'мин', 'Отдых и переключения не учитываются']
     ]);
     $('daily-steps').replaceChildren();
+    const comparisons = KeyloomDaily.comparisons(daily);
+    metricCards($('daily-comparison'), comparisons.map(row => [
+      row.language === 'russian' ? 'Русский' : 'English',
+      `${format(row.before, 1)} → ${format(row.after, 1)}`, 'с',
+      `${row.saved >= 0 ? 'Быстрее' : 'Дольше'} на ${format(Math.abs(row.saved), 1)} с · точность ${format(row.beforeAccuracy, 1)}% → ${format(row.afterAccuracy, 1)}%`
+    ]));
+    if (!comparisons.length) {
+      $('daily-comparison').textContent = daily?.steps.some(step => step.type === 'warmup')
+        ? 'Сравнение появится после повторного текста каждого языка.'
+        : 'Составь новый план, чтобы добавить разминку и повтор текста.';
+    }
     const next = daily?.steps.find(step => !step.result);
     if (daily) {
       for (const step of daily.steps) {

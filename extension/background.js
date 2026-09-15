@@ -12,7 +12,8 @@ function dailyContinuation(dailies, url) {
   if (index < 0 || !daily.steps[index].result) return null;
   const next = daily.steps.find(step => !step.result);
   if (next && next !== daily.steps[index + 1]) return null;
-  return { nextLabel: next?.label ?? null, completed: !next };
+  return { nextLabel: next?.label ?? null, completed: !next,
+    comparisons:KeyloomDaily.comparisons(daily) };
 }
 function syncPermissions(config) {
   return { origins: ['https://' + new URL(config.url).hostname + '/*'],

@@ -5,6 +5,22 @@
     english: [[719,631],[1031,697],[1072,622],[1182,902],[1223,891],[1386,618],[1477,629],[1614,705]],
     russian: [[20,661],[31,603],[35,785],[36,861],[41,803],[45,607],[93,608],[94,658]]
   };
+  const warmupTexts = {
+    english: 'the morning light fills the room and a quiet day begins we open the window and listen to the wind outside there is time to notice little things and find a steady rhythm every small step helps us move forward with care',
+    russian: 'утренний свет наполняет комнату и начинается тихий день мы открываем окно и слушаем ветер за окном есть время заметить простые вещи и найти спокойный ритм каждый небольшой шаг помогает двигаться вперёд без спешки и сохранять внимание к тому что происходит вокруг'
+  };
+  function warmupWords(language, speed) {
+    const source = warmupTexts[language].split(' ');
+    const budget = Math.max(10, Math.min(300, speed)) * 5 / 2;
+    const words = [];
+    let length = 0;
+    while (words.length < 500 && (words.length < 10 || length < budget)) {
+      const word = source[words.length % source.length];
+      words.push(word);
+      length += word.length + 1;
+    }
+    return words;
+  }
   function options(input = {}) {
     const result = { minutes: 20, languages: 'both', goal: 'balanced', kind: 'auto', rounds: 3,
       seconds: 60, repair: true, quote: true, repeat: true, target: 80,
@@ -49,7 +65,10 @@
         budget -= seconds;
         return true;
       };
-      if (prefs.repeat) add('review', 30, 'Повторение по расписанию');
+      const words = warmupWords(language, speed);
+      add('warmup', 30, 'Разминка · начальный текст', {words});
+      budget -= 30; // Reserve the identical closing text before optional blocks.
+      if (prefs.repeat && budget >= 120) add('review', 30, 'Повторение по расписанию');
       const quote = quotes[language][Math.abs(Math.floor(now / 86400000)) % quotes[language].length];
       const quoteSeconds = Math.max(30, Math.ceil(quote[1] / (speed * 5) * 60 / 30) * 30);
       const reserved = prefs.quote && budget >= quoteSeconds + 90 ? quoteSeconds + (prefs.repair ? 30 : 0) : 0;
@@ -70,10 +89,17 @@
         add(targeted ? 'focus' : 'time', seconds,
           targeted ? 'Закрепление точности' : 'Контроль переноса навыка');
       }
+      budget += 30;
+      add('cooldown', 30, 'Повтор текста · сравнение с разминкой', {words:[...words]});
     }
     return {id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps};
   }
   function exercise(daily, step, sessions, learning, dictionary, random = Math.random) {
+    if (['warmup','cooldown'].includes(step.type)) {
+      return {id:crypto.randomUUID(), date:Date.now(), language:step.language,
+        layout:daily.layout, seconds:30, kind:'words', targets:[],
+        words:[...step.words], wordCount:step.words.length};
+    }
     const prefs = daily.prefs;
     const scope = {language:step.language, layout:daily.layout};
     const profile = KeyloomCore.profile(sessions, scope);
@@ -159,5 +185,17 @@
     while ((days.get(cursor) ?? 0) >= prefs.minutes) { streak++; cursor--; }
     return {minutes:days.get(today) ?? 0, streak};
   }
-  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress});
+  function comparisons(daily) {
+    if (!daily) return [];
+    return ['english','russian'].flatMap(language => {
+      const before = daily.steps.find(step => step.language === language && step.type === 'warmup');
+      const after = daily.steps.find(step => step.language === language && step.type === 'cooldown');
+      if (!before?.result || !after?.result ||
+        JSON.stringify(before.words) !== JSON.stringify(after.words)) return [];
+      return [{language, before:before.result.duration, after:after.result.duration,
+        saved:before.result.duration - after.result.duration,
+        beforeAccuracy:before.result.accuracy, afterAccuracy:after.result.accuracy}];
+    });
+  }
+  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons});
 })();

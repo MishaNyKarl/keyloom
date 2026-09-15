@@ -170,3 +170,16 @@ test('last lesson displays completion and hides continuation', async () => {
   assert.match(h.badge.textContent, /план завершён/);
   assert.equal(h.created.find(node => node.id === 'keyloom-next-step').hidden, true);
 });
+
+test('completed comparison is visible on Monkeytype with both times and accuracy', async () => {
+  const h = await harness(null,false,{completed:true,comparisons:[{language:'english',
+    before:30,after:25,saved:5,beforeAccuracy:99,afterAccuracy:98}]});
+  h.type('street');
+  h.typing.shown=false;
+  h.result.shown=true;
+  await h.changed();
+  const note=h.created.find(node=>node.id==='keyloom-daily-comparison');
+  assert.equal(note.hidden,false);
+  assert.match(note.textContent,/30.0 с → после 25.0 с/);
+  assert.match(note.textContent,/99.0% → 98.0%/);
+});

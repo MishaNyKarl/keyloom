@@ -168,7 +168,7 @@ test('daily launch and completion persist, reject untrusted commands and ignore 
   assert.equal((await h.send({type:'START_DAILY',id},page)).ok,true);
   const url = h.opened.at(-1);
   const first = h.storage.dailies[0].steps[0];
-  const completed = {...h.session('daily-result'),mode:'time',duration:60,date:first.startedAt+1};
+  const completed = {...h.session('daily-result'),mode:'custom',duration:30,date:first.startedAt+1,training:{id:first.exerciseId,kind:'words',targets:[],seconds:30}};
   await Promise.all([h.send({type:'SAVE_SESSION',session:completed},url),h.send({type:'SAVE_SESSION',session:completed},url)]);
   assert.equal(h.storage.dailies[0].steps.filter(step=>step.result).length,1);
   await h.send({type:'OPEN_DASHBOARD',sessionId:completed.id},url);
@@ -206,7 +206,7 @@ for (const firefox of [false, true]) {
     const url = h.opened.at(-1);
     assert.equal((await h.send({type:'NEXT_DAILY'}, url)).ok, false);
     const first = h.storage.dailies[0].steps[0];
-    const session = {...h.session('next-result'), mode:'time', duration:60, date:first.startedAt+1};
+    const session = {...h.session('next-result'), mode:'custom', duration:30, date:first.startedAt+1, training:{id:first.exerciseId,kind:'words',targets:[],seconds:30}};
     const saved = await h.send({type:'SAVE_SESSION', session}, url);
     assert.ok(saved.daily.nextLabel);
     assert.equal((await h.send({type:'NEXT_DAILY'}, url, null)).ok, false);
@@ -223,7 +223,39 @@ for (const firefox of [false, true]) {
     assert.equal(h.updated[0].id, 7);
     assert.equal(h.opened.length, 1);
     assert.equal(new URL(h.updated[0].url).searchParams.get('keyloomStep'), plan.steps[1].id);
-    assert.ok(new URL(h.updated[0].url).searchParams.get('keyloomExercise'));
+    assert.equal(new URL(h.updated[0].url).searchParams.get('keyloomExercise'), null);
     assert.equal((await h.send({type:'NEXT_DAILY'}, h.updated[0].url)).ok, false);
   });
 }
+
+test('full daily route replays warmup text and returns final comparison', async () => {
+  const h = await harness();
+  const page = h.context.chrome.runtime.getURL('dashboard.html');
+  const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english',
+    repeat:false,repair:true,quote:false}},page);
+  await h.send({type:'START_DAILY',id:plan.id},page);
+  let url = h.opened.at(-1);
+  let firstWords;
+  for (let index=0; index<plan.steps.length; index++) {
+    const step = h.storage.dailies[0].steps[index];
+    const state = await h.send({type:'GET_STATE'},url);
+    if (index === 0) firstWords = state.training.words;
+    if (step.type === 'cooldown') assert.deepEqual(state.training.words,firstWords);
+    const training = state.training ? {id:state.training.id,kind:state.training.kind,
+      targets:state.training.targets,seconds:state.training.seconds} : undefined;
+    const result = {...h.session('route-' + index),date:step.startedAt+1,
+      mode:training ? 'custom' : step.type,duration:step.type === 'cooldown' ? 25 : step.seconds,
+      ...(training ? {training} : {})};
+    const saved = await h.send({type:'SAVE_SESSION',session:result},url);
+    assert.equal(saved.dailyStep,'completed');
+    if (index < plan.steps.length-1) {
+      assert.equal((await h.send({type:'NEXT_DAILY'},url)).ok,true);
+      url = h.updated.at(-1).url;
+    } else {
+      assert.equal(saved.daily.completed,true);
+      assert.equal(saved.daily.comparisons[0].before,30);
+      assert.equal(saved.daily.comparisons[0].after,25);
+      assert.equal(saved.daily.comparisons[0].saved,5);
+    }
+  }
+});

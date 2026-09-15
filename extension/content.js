@@ -7,7 +7,7 @@
   let settings = { enabled: false, layout: 'default' }, session = null, firstNode = null;
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
-  let dailyState = null, nextButton, advancing = false;
+  let dailyState = null, nextButton, comparisonNote, advancing = false;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -54,7 +54,10 @@
           paint();
         }
       });
-      panel.append(badge, open, nextButton);
+      comparisonNote = document.createElement('span');
+      comparisonNote.id = 'keyloom-daily-comparison';
+      comparisonNote.style.cssText = 'flex-basis:100%;max-width:480px;color:#dbe7b7;font:12px/1.5 system-ui;padding:4px 8px';
+      panel.append(badge, open, nextButton, comparisonNote);
       document.body.append(panel);
     }
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
@@ -64,6 +67,12 @@
     const nextLabel = advancing ? 'Открываю…' : 'Следующее задание →';
     if (nextButton.textContent !== nextLabel) nextButton.textContent = nextLabel;
     nextButton.title = dailyState?.nextLabel ?? '';
+    const comparisons = dailyState?.comparisons ?? [];
+    comparisonNote.hidden = !comparisons.length || Boolean(session);
+    const comparisonText = comparisons.map(row =>
+      `${row.language === 'russian' ? 'RU' : 'EN'}: до ${row.before.toFixed(1)} с → после ${row.after.toFixed(1)} с; точность ${row.beforeAccuracy.toFixed(1)}% → ${row.afterAccuracy.toFixed(1)}%`
+    ).join(' · ') + (comparisons.length ? '. Повтор знакомого текста — результат этой тренировки, не оценка общего прогресса.' : '');
+    if (comparisonNote.textContent !== comparisonText) comparisonNote.textContent = comparisonText;
   }
   function targetText(node) {
     return Array.from(node.querySelectorAll('letter:not(.extra)')).map(l => l.textContent).join('').normalize('NFC');
