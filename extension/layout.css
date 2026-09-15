@@ -148,3 +148,10 @@ h1[tabindex="-1"]:focus { outline: none; }
   background: var(--panel);
   border: 1px dashed var(--border);
 }
+
+/* Controls share the page's text size; headings and metrics retain hierarchy. */
+body { font-size: 1rem; }
+button, input, select, textarea,
+.sidebar .nav-item, .primary, .secondary, .text-button {
+  font-size: 1em;
+}

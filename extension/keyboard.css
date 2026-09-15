@@ -12,7 +12,7 @@
   border-radius: 8px;
   background: var(--bg-color, var(--bg));
   color: var(--sub-color, var(--muted));
-  font: 16px/1.5 var(--mono);
+  font: 1rem/1.5 var(--mono);
   overflow: hidden;
 }
 #keyloom-command-menu[open] {
@@ -38,7 +38,7 @@
   height: 22px;
   flex: 0 0 22px;
   background: currentColor;
-  mask: url('icons/lucide/search.svg') center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg%0A%20%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%0A%20%20width%3D%2224%22%0A%20%20height%3D%2224%22%0A%20%20viewBox%3D%220%200%2024%2024%22%0A%20%20fill%3D%22none%22%0A%20%20stroke%3D%22currentColor%22%0A%20%20stroke-width%3D%222%22%0A%20%20stroke-linecap%3D%22round%22%0A%20%20stroke-linejoin%3D%22round%22%0A%3E%0A%20%20%3Cpath%20d%3D%22m21%2021-4.34-4.34%22%20%2F%3E%0A%20%20%3Ccircle%20cx%3D%2211%22%20cy%3D%2211%22%20r%3D%228%22%20%2F%3E%0A%3C%2Fsvg%3E%0A") center / contain no-repeat;
 }
 #keyloom-command-menu input {
   box-sizing: border-box;
@@ -52,7 +52,7 @@
   background: transparent;
   color: var(--text-color, var(--text));
   caret-color: var(--main-color, var(--accent));
-  font-size: 22px;
+  font-size: 1em;
 }
 #keyloom-command-menu input::placeholder {
   color: var(--sub-color, var(--muted));
@@ -67,7 +67,7 @@
 }
 #keyloom-command-menu .keyloom-command-search button {
   padding: 4px;
-  font-size: 12px;
+  font-size: .75em;
 }
 .keyloom-command-list {
   max-height: calc(80vh - 76px);
@@ -76,13 +76,15 @@
   scrollbar-color: var(--sub-color, var(--muted)) transparent;
   padding-bottom: 8px;
 }
-.keyloom-command-list button {
+#keyloom-command-menu .keyloom-command-list button {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   padding: 6px 20px;
+  justify-content: flex-start;
   text-align: left;
+  font-size: .75em;
 }
 .keyloom-command-list button::before {
   content: '';
@@ -128,7 +130,7 @@ html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important
   width: max-content;
   max-width: min(600px, calc(100vw - 32px));
   color: var(--sub-color, var(--muted));
-  font: 14px/1.25 var(--mono);
+  font: 1rem/1.25 var(--mono);
 }
 #keyloom-panel {
   box-sizing: border-box;
@@ -203,3 +205,30 @@ body:has(#keyloom-widget) .full-width:has(> #ad-result-wrapper) {
 #keyloom-open-app { --keyloom-icon: url('icons/lucide/panels-top-left.svg'); }
 #keyloom-next-step { --keyloom-icon: url('icons/lucide/skip-forward.svg'); }
 #keyloom-open-commands { --keyloom-icon: url('icons/lucide/command.svg'); }
+
+/* Host-site focus styles must not draw rings inside the command palette. */
+#keyloom-command-menu input,
+#keyloom-command-menu button {
+  outline: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  text-align: left;
+}
+#keyloom-command-menu .keyloom-command-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+#keyloom-command-menu kbd {
+  font-size: 1em;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+#keyloom-command-menu .keyloom-command-search::before {
+  display: block;
+  width: 1em;
+  height: 1em;
+  flex-basis: 1em;
+}

@@ -12,7 +12,10 @@
       for (const command of matches) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.textContent = command.label;
+        const label = document.createElement('span');
+        label.className = 'keyloom-command-label';
+        label.textContent = command.label;
+        button.append(label);
         if (command.key) {
           const hint = document.createElement('kbd');
           hint.textContent = 'Alt+' + command.key.slice(3);
