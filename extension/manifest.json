@@ -32,11 +32,13 @@
       "js": [
         "core.js",
         "configuration.js",
+        "keyboard.js",
         "content.js"
       ],
       "run_at": "document_start",
       "css": [
-        "themes.css"
+        "themes.css",
+        "keyboard.css"
       ]
     }
   ],

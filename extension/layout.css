@@ -1,0 +1,85 @@
+/* Flat, content-first layout shared by all Keyloom themes. */
+body { max-width: 1240px; margin: 0 auto; padding: 28px 32px 0; }
+.sidebar { position: static; width: auto; padding: 0; border: 0; background: transparent; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 24px; }
+.sidebar nav { display: flex; flex: 1; flex-wrap: wrap; gap: 6px 16px; }
+.sidebar-label, .local-card, .monkey-link, .nav-dot, .beta { display: none; }
+.brand { font-size: 25px; letter-spacing: -1px; color: var(--text); }
+.brand-mark { background: transparent; color: var(--accent); width: 26px; }
+.nav-item { width: auto; padding: 6px 0; margin: 0; gap: 7px; font-size: 12px; color: var(--muted); }
+.nav-item.selected { background: transparent; color: var(--accent); }
+.nav-item:hover { color: var(--text); }
+.sidebar-bottom { margin: 0; }
+.version { font-size: 10px; letter-spacing: 0; margin: 0; gap: 8px; }
+main { margin: 0; }
+.topbar { height: auto; min-height: 65px; padding: 15px 0; border: 0; gap: 12px; flex-wrap: wrap; }
+.top-controls { flex-wrap: wrap; gap: 14px; }
+.topbar > span { letter-spacing: 0; font-size: 11px; }
+#open-commands { display: flex; gap: 10px; padding: 7px 0; }
+kbd { font: inherit; font-size: .85em; padding: 2px 5px; border-radius: 3px; background: var(--surface); color: var(--text); }
+.page-content { padding: 34px 0 0; }
+.page-heading { margin-bottom: 36px; }
+h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -1px; font-weight: 400; }
+h2 { font-size: 16px; font-weight: 400; color: var(--muted); }
+.eyebrow { font-size: 10px; font-weight: 400; letter-spacing: 1px; }
+.panel, .stat, .practice-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.stats-grid { gap: 24px; margin-bottom: 38px; }
+.stat { padding: 0; min-width: 0; }
+.stat strong { color: var(--accent); font-size: clamp(32px, 4vw, 48px); line-height: 1.5; letter-spacing: -2px; }
+.stat-label { font-size: 12px; color: var(--muted); }
+.stat-label > span { display: none; }
+.stat small { font-size: 10px; line-height: 1.6; }
+.middle-grid, .bottom-grid { gap: 36px; margin-bottom: 42px; }
+.chart { padding: 15px 0 0; height: 240px; }
+.panel-heading { padding: 0 0 12px; }
+.chart-caption, .panel-footer, .keyboard-note { margin: 12px 0; padding: 0; border: 0; }
+.practice-card { padding: 0 0 0 24px; border-left: 1px solid var(--surface); }
+.practice-card:after { display: none; }
+.practice-card h2 { font-size: 22px; color: var(--text); }
+.practice-card p { max-width: none; color: var(--muted); }
+.primary, .secondary { border: 0; border-radius: 6px; }
+.secondary { background: var(--surface); color: var(--text); }
+.focus-chip { border: 0; background: var(--surface); padding: 4px 10px; }
+.segments { background: var(--panel); gap: 6px; }
+.segments .active { color: var(--accent); background: var(--surface); }
+th, td { border-color: var(--surface); }
+th:first-child, td:first-child { padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+.keyboard { padding: 24px 0 12px; }
+.key { border: 0; }
+.exercise { padding: 0; }
+.workout-settings { background: var(--panel); border-radius: 8px; padding: 20px; }
+.workout-results { margin: 36px 0; }
+.result-cards, .result-caption { margin-left: 0; margin-right: 0; }
+.settings-panel { max-width: none; padding: 0 0 30px; margin-bottom: 32px; border-bottom: 1px solid var(--surface); }
+.setting-row { border: 0; padding: 16px 0; gap: 28px; }
+.setting-row > span { flex: 1; }
+.setting-row select { min-width: 220px; }
+input, select, textarea { box-shadow: none; }
+select, .custom-grid input, #sync-form input, textarea { border-color: var(--surface); background: var(--panel); }
+.notice { padding: 10px 0; background: transparent; color: var(--muted); border: 0; }
+.page-footer { border-top: 1px solid var(--surface); margin-top: 35px; padding: 20px 0; }
+.daily-section { padding: 0 0 28px; margin: 32px 0; border-bottom: 1px solid var(--surface); }
+.daily-steps { padding-left: 24px; }
+.daily-milestones { gap: 15px; }
+#practice-dialog { background: var(--bg); border: 1px solid var(--border); box-shadow: none; }
+.theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+  .sidebar { gap: 16px; }
+  .sidebar nav { flex-basis: 100%; }
+  .sidebar-bottom { display: none; }
+  .middle-grid, .bottom-grid { grid-template-columns: 1fr; }
+  .practice-card { padding: 24px 0 0; border-left: 0; border-top: 1px solid var(--surface); }
+  .theme-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  body { padding: 20px 18px 0; }
+  .page-content { padding-top: 24px; }
+  .page-heading { align-items: start; flex-wrap: wrap; gap: 16px; }
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 25px 16px; }
+  .stat strong { font-size: 34px; }
+  .setting-row select { min-width: 0; max-width: 100%; }
+  .topbar > span { display: none; }
+  .workout-settings { padding: 16px; }
+}
+
+h1[tabindex="-1"]:focus { outline: none; }

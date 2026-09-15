@@ -9,7 +9,7 @@ async function harness(training=null, firefox=false, daily=null) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
-  let storageListener;
+  let storageListener, keyboard;
   let observer, first, clock = 0, wordIndex=0, target='street';
   const messages=[];
   const element = () => ({ shown:true, style:{},textContent:'',
@@ -33,6 +33,7 @@ async function harness(training=null, firefox=false, daily=null) {
   const context = vm.createContext({document:doc, location:{pathname:'/'}, crypto:webcrypto, performance:{now:()=>clock+=100},
     getComputedStyle:()=>({visibility:'visible'}),requestAnimationFrame:cb=>frames.push(cb),
     MutationObserver:class {constructor(cb){observer=cb;}observe(){}},
+    KeyloomKeyboard:{create(options){keyboard=options;return {open(){}};}},
     KeyloomConfiguration:{selected:()=>true,read:()=>({ok:true})},
     chrome:{runtime:{async sendMessage(message){
       messages.push(message);
@@ -48,7 +49,7 @@ async function harness(training=null, firefox=false, daily=null) {
   await settle();
   const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
-  return {typing,result,badge,input,saves,type,changed,context,messages,mode,created,
+  return {get keyboard(){return keyboard;},typing,result,badge,input,saves,type,changed,context,messages,mode,created,
     changeTheme(theme){storageListener({theme:{newValue:theme}},'local');},
     nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
     async clickBadge(){badge.click();await settle();},
@@ -197,4 +198,18 @@ test('theme changes during typing preserve the complete captured session', async
   assert.equal(h.saves.length,1);
   assert.equal(h.saves[0].status,'completed');
   assert.equal(h.saves[0].presses,6);
+});
+
+test('keyboard continuation shares button safeguards and is unavailable during typing', async () => {
+  const h=await harness(null,false,{nextLabel:'Repair',completed:false});
+  h.type('street');
+  assert.equal(h.keyboard.canOpen(),false);
+  h.typing.shown=false;h.result.shown=true;
+  await h.changed();
+  assert.equal(h.keyboard.canOpen(),true);
+  const next=h.keyboard.commands.find(command=>command.key==='KeyN');
+  assert.equal(next.available(),true);
+  await next.run();
+  assert.equal(next.available(),false);
+  assert.equal(h.messages.filter(message=>message.type==='NEXT_DAILY').length,1);
 });

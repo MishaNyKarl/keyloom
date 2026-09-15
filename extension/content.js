@@ -40,20 +40,9 @@
       nextButton = document.createElement('button');
       nextButton.id = 'keyloom-next-step';
       nextButton.type = 'button';
+      nextButton.setAttribute('aria-keyshortcuts', 'Alt+N');
       nextButton.style.cssText = open.style.cssText;
-      nextButton.addEventListener('click', async () => {
-        if (advancing || session || !dailyState || dailyState.completed) return;
-        advancing = true;
-        status = 'Открываю следующее задание…';
-        paint();
-        try {
-          await send({type:'NEXT_DAILY'});
-        } catch (error) {
-          advancing = false;
-          status = 'Не удалось перейти: ' + error.message;
-          paint();
-        }
-      });
+      nextButton.addEventListener('click', advance);
       comparisonNote = document.createElement('span');
       comparisonNote.id = 'keyloom-daily-comparison';
       comparisonNote.style.cssText = 'flex-basis:100%;max-width:480px;color:var(--text);font:12px/1.5 var(--mono);padding:4px 8px';
@@ -61,11 +50,13 @@
       document.body.append(panel);
     }
     panel.setAttribute('data-keyloom-theme', ['dark','light','repose-dark'].includes(theme) ? theme : 'dark');
+    panel.setAttribute('data-typing', String(Boolean(session)));
+    panel.inert = Boolean(session);
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;
     nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
     nextButton.disabled = advancing;
-    const nextLabel = advancing ? 'Открываю…' : 'Следующее задание →';
+    const nextLabel = advancing ? 'Открываю…' : 'Следующее задание · Alt+N';
     if (nextButton.textContent !== nextLabel) nextButton.textContent = nextLabel;
     nextButton.title = dailyState?.nextLabel ?? '';
     const comparisons = dailyState?.comparisons ?? [];
@@ -74,6 +65,19 @@
       `${row.language === 'russian' ? 'RU' : 'EN'}: до ${row.before.toFixed(1)} с → после ${row.after.toFixed(1)} с; точность ${row.beforeAccuracy.toFixed(1)}% → ${row.afterAccuracy.toFixed(1)}%`
     ).join(' · ') + (comparisons.length ? '. Повтор знакомого текста — результат этой тренировки, не оценка общего прогресса.' : '');
     if (comparisonNote.textContent !== comparisonText) comparisonNote.textContent = comparisonText;
+  }
+  async function advance() {
+    if (advancing || session || !dailyState || dailyState.completed) return;
+    advancing = true;
+    status = 'Открываю следующее задание…';
+    paint();
+    try {
+      await send({type:'NEXT_DAILY'});
+    } catch (error) {
+      advancing = false;
+      status = 'Не удалось перейти: ' + error.message;
+      paint();
+    }
   }
   function targetText(node) {
     return Array.from(node.querySelectorAll('letter:not(.extra)')).map(l => l.textContent).join('').normalize('NFC');
@@ -190,6 +194,29 @@
       if (records.some(r => r.target !== badge && !badge?.contains(r.target))) queueCheck();
     }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] });
     check();
+    const commands = KeyloomKeyboard.create({
+      theme: () => theme,
+      canOpen: () => !session && !document.querySelector('dialog[open]:not(#keyloom-command-menu)') &&
+        (!document.activeElement?.closest?.('input, textarea, select, [contenteditable="true"]') ||
+          document.activeElement.id === 'wordsInput' ||
+          document.activeElement.closest?.('#keyloom-command-menu')),
+      commands: [
+        {label:'Следующее задание', alias:'next daily lesson', key:'KeyN',
+          available:() => settings.enabled && Boolean(dailyState) && !dailyState.completed && !advancing,
+          run:advance},
+        {label:'Открыть Keyloom', alias:'dashboard overview', key:'KeyO',
+          run:() => pendingSave.then(() => send({type:'OPEN_DASHBOARD',sessionId:lastSavedId}))},
+        {label:'Ежедневный план', alias:'daily plan',
+          run:() => send({type:'OPEN_DASHBOARD',view:'daily'})}
+      ]
+    });
+    const menu = document.createElement('button');
+    menu.type = 'button';
+    menu.textContent = 'Команды · Alt+K';
+    menu.setAttribute('aria-keyshortcuts', 'Alt+K');
+    menu.style.cssText = badge.style.cssText;
+    menu.addEventListener('click', commands.open);
+    panel.append(menu);
   }
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount, { once: true });
   void send({ type: 'GET_STATE' }).then(state => {

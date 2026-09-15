@@ -1,1 +1,7 @@
 :root{font:13px/1.5 var(--mono);color:var(--text);background:var(--bg);}*{box-sizing:border-box}body{width:310px;margin:0;padding:23px}header{display:flex;justify-content:space-between;align-items:center}header strong{font-size:26px;letter-spacing:-1px}header strong span{color:var(--accent);font-size:19px;margin-left:3px}header small{font-size:7px;letter-spacing:1px;color:var(--muted)}h1{font-size:20px;font-weight:500;margin:26px 0 8px}p{color:var(--muted);font-size:12px;margin:0;line-height:1.7}.summary{display:flex;align-items:center;gap:14px;border:1px solid var(--border);border-radius:9px;padding:14px;margin:22px 0}.summary strong{font:30px var(--mono);color:var(--accent)}.summary span{font-size:11px;color:var(--muted)}label{display:flex;justify-content:space-between;align-items:center;padding:4px 0 20px}input{accent-color:var(--accent);width:18px;height:18px}button{font:600 13px var(--mono);display:flex;justify-content:space-between;width:100%;border:0;border-radius:7px;background:var(--accent);color:var(--on-accent);padding:13px 16px;cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:4px}#status{font-size:10px;margin-top:15px;text-align:center}
+
+.summary { border: 0; padding: 12px 0; border-radius: 0; }
+.summary strong { font-size: 40px; font-weight: 400; }
+header strong { font-weight: 400; }
+h1 { color: var(--muted); font-size: 18px; }
+button { font-weight: 400; }

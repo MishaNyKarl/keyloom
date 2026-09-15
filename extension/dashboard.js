@@ -773,5 +773,24 @@
   if (installed) extensionApi.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.sessions || changes.settings || changes.syncStatus || changes.syncConfig || changes.learning || changes.dailies)) void load(); });
   else window.addEventListener('storage', () => void load());
   window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
+  const navigate = view => {
+    showView(view);
+    const heading = $(view).querySelector('h1');
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
+  };
+  const commandMenu = KeyloomKeyboard.create({escape:true,hidePointer:true,commands:[
+    ...[['overview','Обзор'],['practice','Прицельная практика'],['daily','Ежедневный план'],
+      ['statistics','Статистика'],['history','История'],['settings','Настройки']]
+      .map(([view,label]) => ({label,alias:view,run:() => navigate(view)})),
+    {label:'Запустить следующий шаг плана',alias:'start next daily',
+      available:() => installed && !demo && Boolean(activeDaily()?.steps.find(step => !step.result)),
+      run:async () => { await message({type:'START_DAILY',id:activeDaily().id}); await load(); }},
+    {label:'Настроить прицельную практику',alias:'custom practice',
+      run:() => { showView('practice'); $('practice-customize').click(); }},
+    {label:'Выбрать тему',alias:'theme appearance',run:() => {
+      showView('settings'); document.querySelector('input[name="keyloom-theme"]:checked')?.focus();
+    }}
+  ]});
+  $('open-commands').addEventListener('click', commandMenu.open);
   showView(location.hash.slice(1)); void load();
 })();

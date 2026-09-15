@@ -12,6 +12,7 @@
   <script src="learning.js" defer></script><script src="daily.js" defer></script>
   <script src="practice-options.js" defer></script>
   <script src="vendor/lz-string.js" defer></script><script src="practice.js" defer></script>
+  <link rel="stylesheet" href="keyboard.css"><link rel="stylesheet" href="layout.css"><script src="keyboard.js" defer></script>
   <script src="demo.js" defer></script><script src="dashboard.js" defer></script>
 </head>
 <body>
@@ -33,12 +34,12 @@
     </div>
   </aside>
   <main>
-    <header class="topbar"><span>МАЛЕНЬКИЕ ШАГИ. УВЕРЕННЫЙ РИТМ.</span><div class="top-controls"><span id="environment" class="environment"></span><label class="select-label">Язык<select id="language"><option value="english">English</option><option value="russian">Русский</option></select></label><span class="avatar">k.</span></div></header>
+    <header class="topbar"><span>твой ритм / keyloom</span><div class="top-controls"><span id="environment" class="environment"></span><label class="select-label">Язык<select id="language"><option value="english">English</option><option value="russian">Русский</option></select></label><button type="button" id="open-commands" class="text-button" aria-keyshortcuts="Alt+K">⌘ команды <kbd>Alt+K</kbd></button></div></header>
     <div id="demo-banner" class="notice" hidden>Демонстрационные данные · это пример интерфейса, а не твои результаты. <a href="dashboard.html">Вернуться к своим данным →</a></div>
     <div id="preview-banner" class="notice" hidden>Это предпросмотр. Запись тестов работает после установки расширения в Chrome или Edge.</div>
     <div class="page-content">
       <section id="overview" class="view">
-        <div class="page-heading"><div><div class="eyebrow">ТВОЙ ПРОГРЕСС</div><h1>Найди свой ритм<span>.</span></h1><p>Замечай сложные места. Тренируйся с фокусом.</p></div><label class="period-label">Период<select id="period"><option value="30">Последние 30 дней</option><option value="7">Последние 7 дней</option><option value="all">Всё время</option></select></label></div>
+        <div class="page-heading"><div><div class="eyebrow">ТВОЙ ПРОГРЕСС</div><h1>Обзор</h1><p>Замечай сложные места. Тренируйся с фокусом.</p></div><label class="period-label">Период<select id="period"><option value="30">Последние 30 дней</option><option value="7">Последние 7 дней</option><option value="all">Всё время</option></select></label></div>
         <div class="stats-grid">
           <article class="stat"><span class="stat-label">Скорость печати <span>↗</span></span><div><strong id="stat-wpm">—</strong><span class="unit">wpm</span></div><small>медиана завершённых тестов</small></article>
           <article class="stat"><span class="stat-label">Точность <span>◎</span></span><div><strong id="stat-accuracy">—</strong><span class="unit">%</span></div><small>с учётом исправленных ошибок</small></article>
@@ -46,11 +47,11 @@
           <article class="stat"><span class="stat-label">Завершено тестов <span>▤</span></span><div><strong id="stat-sessions">0</strong><span class="unit">тестов</span></div><small id="stat-samples">профиль ещё формируется</small></article>
         </div>
         <div class="middle-grid">
-          <article class="panel chart-panel"><div class="panel-heading"><h2>Каждый тест — шаг вперёд</h2><span class="chart-legend"><i></i> Скорость, wpm</span></div><div id="chart" class="chart"></div><p class="chart-caption">Оценка Keyloom по событиям ввода. Может отличаться от WPM в Monkeytype.</p></article>
+          <article class="panel chart-panel"><div class="panel-heading"><h2>Скорость печати</h2><span class="chart-legend"><i></i> Скорость, wpm</span></div><div id="chart" class="chart"></div><p class="chart-caption">Оценка Keyloom по событиям ввода. Может отличаться от WPM в Monkeytype.</p></article>
           <article class="practice-card"><div class="eyebrow">СЛЕДУЮЩИЙ ШАГ <span>↗</span></div><h2 id="practice-title">Начнём<br>со знакомства.</h2><p id="practice-description">Небольшой тест поможет увидеть твой ритм и первые сложные сочетания.</p><div id="focus-chips" class="focus-chips"></div><div class="practice-meta"><span>40 слов</span><span>≈ 1 минута</span></div><button id="start-practice" class="primary">Подобрать тренировку <span>→</span></button></article>
         </div>
         <div class="bottom-grid">
-          <article class="panel weaknesses"><div class="panel-heading"><div><h2>Здесь можно стать лучше</h2><p>Приоритет учитывает ошибки и чистую скорость.</p></div><div class="segments" aria-label="Тип статистики"><button data-group="pairs" class="active" aria-pressed="true">Пары</button><button data-group="sequences" aria-pressed="false">Связки</button><button data-group="words" aria-pressed="false">Слова</button></div></div><div id="weakness-table"></div><div class="panel-footer">От 5 наблюдений · редкие сочетания пока не ранжируем</div></article>
+          <article class="panel weaknesses"><div class="panel-heading"><div><h2>Что потренировать</h2><p>Приоритет учитывает ошибки и чистую скорость.</p></div><div class="segments" aria-label="Тип статистики"><button data-group="pairs" class="active" aria-pressed="true">Пары</button><button data-group="sequences" aria-pressed="false">Связки</button><button data-group="words" aria-pressed="false">Слова</button></div></div><div id="weakness-table"></div><div class="panel-footer">От 5 наблюдений · редкие сочетания пока не ранжируем</div></article>
           <article class="panel keyboard-panel"><div class="panel-heading"><div><h2>Карта точности</h2><p>Где пальцам нужно чуть больше практики.</p></div></div><div id="keyboard" class="keyboard"></div><div class="heat-legend"><span>меньше ошибок</span><i></i><i></i><i></i><i></i><span>больше</span></div><p class="keyboard-note">Буквы, а не физические клавиши. Наведи, чтобы увидеть статистику.</p></article>
         </div>
       </section>
@@ -118,7 +119,7 @@
         <p class="muted">Все показатели рассчитаны по сохранённой истории (до 160 сессий). Изменение скорости: последние 5 тестов против предыдущих 5, без тестов короче 5 секунд. Разный режим и сложность текста могут влиять на сравнение. «Потренировано» означает практику связки, а не подтверждённое освоение.</p>
       </section>
       <section id="history" class="view" hidden><div class="page-heading"><div><div class="eyebrow">ИСТОРИЯ ПРАКТИКИ</div><h1>Всё начинается с попытки<span>.</span></h1><p>Последние 160 сессий. Прерванные тесты не влияют на рекомендации.</p></div></div><article class="panel" id="history-list"></article></section>
-      <section id="settings" class="view" hidden><div class="page-heading"><div><div class="eyebrow">ТВОЁ ПРОСТРАНСТВО</div><h1>Практика под тебя<span>.</span></h1><p>Локальная история и синхронизация с твоим сервером.</p></div></div>
+      <section id="settings" class="view" hidden><div class="page-heading"><div><div class="eyebrow">ТВОЁ ПРОСТРАНСТВО</div><h1>Настройки</h1><p>Локальная история и синхронизация с твоим сервером.</p></div></div>
         <article class="panel settings-panel">
           <h2>Синхронизация с сервером</h2>
           <p class="muted">При подключении история тестов, статистика букв и слов, время и результаты тренировок передаются на указанный сервер. Журнал нажатий не отправляется. Ключ даёт доступ ко всей твоей истории: используй один ключ только в своих браузерах.</p>
@@ -135,6 +136,7 @@
           <p><a class="text-link" href="privacy.html" target="_blank" rel="noopener">Политика приватности</a> · <a class="text-link" href="mailto:karlyavinmisha@gmail.com">Поддержка</a></p>
           <p class="muted">Без сети тесты сохраняются локально. Отключение удаляет ключ из расширения, но сохраняет историю на сервере. На другом устройстве подключи тот же адрес и ключ.</p>
         </article>
+        <article class="panel settings-panel"><h2>Клавиатура</h2><p class="muted"><kbd>Alt+K</kbd> — команды Keyloom · <kbd>Esc</kbd> — команды вне полей ввода в Keyloom.<br><kbd>Alt+N</kbd> — следующее задание на Monkeytype после зачёта.<br><kbd>Alt+O</kbd> — открыть Keyloom со страницы результата Monkeytype.<br>В меню: поиск, ↑ ↓, Enter, Esc. Tab перемещает фокус. Курсор скрывается через 2,5 секунды без движения и возвращается при движении мыши. Во время печати на Monkeytype команды Keyloom не срабатывают.</p></article>
         <article class="panel settings-panel appearance-panel">
           <div class="appearance-heading">
             <div><h2>◌ Оформление</h2><p>Выбери палитру под своё настроение. Цвета на карточке — цвета темы.</p></div>

@@ -1,0 +1,26 @@
+#keyloom-command-menu {
+  box-sizing: border-box;
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(620px, 80vh);
+  margin: 12vh auto auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 var(--mono);
+  overflow: auto;
+}
+#keyloom-command-menu::backdrop { background: #0009; }
+#keyloom-command-menu button, #keyloom-command-menu input { font: inherit; }
+.keyloom-command-heading { display: flex; justify-content: space-between; gap: 16px; color: var(--muted); }
+#keyloom-command-menu button { cursor: pointer; border: 0; border-radius: 5px; color: var(--text); background: transparent; padding: 8px; }
+#keyloom-command-menu input { box-sizing: border-box; width: 100%; margin: 16px 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; color: var(--text); padding: 10px 0; }
+.keyloom-command-list button { display: flex; justify-content: space-between; gap: 20px; width: 100%; text-align: left; }
+#keyloom-command-menu button:hover, #keyloom-command-menu button:focus-visible { background: var(--accent); color: var(--on-accent); }
+#keyloom-command-menu :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#keyloom-command-menu kbd { font: inherit; color: inherit; white-space: nowrap; }
+#keyloom-command-menu [role=alert] { color: var(--error); }
+html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important; }
+#keyloom-panel[data-typing=true] { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { #keyloom-panel { transition: opacity .15s; } }
