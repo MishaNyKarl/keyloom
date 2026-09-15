@@ -7,7 +7,14 @@ const source = await readFile(new URL('../extension/theme.js', import.meta.url),
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function harness(namespace = 'chrome', initial = 'light', preview = false) {
   const attributes = {};
-  const select = {addEventListener(event, callback) { this[event] = callback; }};
+  const choices = ['dark','light','repose-dark'].map(value => ({value,
+    addEventListener(event, callback) { this[event] = callback; }}));
+  const select = {get value() { return choices.find(choice => choice.checked)?.value; },
+    async change(event) {
+      const choice = choices.find(row => row.value === event.target.value);
+      choice.checked = true;
+      await choice.change({target:choice});
+    }};
   const error = {};
   const saved = {theme:initial, settings:{enabled:true, layout:'default'}};
   let listener;
@@ -17,13 +24,13 @@ async function harness(namespace = 'chrome', initial = 'light', preview = false)
   }};
   const context = vm.createContext({URLSearchParams, location:{search:preview ? '?demo=1' : ''},
     document:{documentElement:{setAttribute:(key,value) => attributes[key] = value,
-      getAttribute:key => attributes[key]}, getElementById:id => id === 'theme' ? select : error},
+      getAttribute:key => attributes[key]}, querySelectorAll:() => choices, getElementById:() => error},
     [namespace]:api,
     localStorage:{getItem:() => initial, setItem:(key,value) => saved.preview = value}
   });
   vm.runInContext(source,context);
   await settle();
-  return {attributes,select,error,saved,api,change:theme => listener({theme:{newValue:theme}},'local')};
+  return {attributes,select,choices,error,saved,api,change:theme => listener({theme:{newValue:theme}},'local')};
 }
 
 for (const namespace of ['chrome','browser']) {
@@ -32,6 +39,7 @@ for (const namespace of ['chrome','browser']) {
     assert.equal(h.select.value,'light');
     await h.select.change({target:{value:'repose-dark'}});
     assert.equal(h.saved.theme,'repose-dark');
+    assert.equal(h.choices.filter(choice => choice.checked).length,1);
     assert.equal(h.attributes['data-keyloom-theme'],'repose-dark');
     assert.deepEqual(h.saved.settings,{enabled:true,layout:'default'});
     h.change('dark');

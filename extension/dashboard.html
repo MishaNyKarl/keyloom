@@ -135,15 +135,41 @@
           <p><a class="text-link" href="privacy.html" target="_blank" rel="noopener">Политика приватности</a> · <a class="text-link" href="mailto:karlyavinmisha@gmail.com">Поддержка</a></p>
           <p class="muted">Без сети тесты сохраняются локально. Отключение удаляет ключ из расширения, но сохраняет историю на сервере. На другом устройстве подключи тот же адрес и ключ.</p>
         </article>
-        <article class="panel settings-panel">
-          <h2>Оформление</h2>
-          <label class="setting-row"><span><strong>Тема Keyloom</strong><small>JetBrains Mono во всём интерфейсе. Тема также применяется к панели Keyloom на Monkeytype.</small></span>
-            <select id="theme" aria-describedby="theme-error">
-              <option value="dark">Keyloom Dark · тёмная</option>
-              <option value="light">Keyloom Light · светлая</option>
-              <option value="repose-dark">Repose Dark · графит и песок</option>
-            </select>
-          </label>
+        <article class="panel settings-panel appearance-panel">
+          <div class="appearance-heading">
+            <div><h2>◌ Оформление</h2><p>Выбери палитру под своё настроение. Цвета на карточке — цвета темы.</p></div>
+            <span class="appearance-tag">JetBrains Mono</span>
+          </div>
+          <fieldset class="theme-picker" aria-describedby="theme-hint theme-error">
+            <legend>Готовые темы</legend>
+            <div class="theme-grid">
+              <label class="theme-choice" data-keyloom-theme="dark">
+                <input type="radio" name="keyloom-theme" value="dark">
+                <span class="theme-tile">
+                  <span class="theme-check" aria-hidden="true">✓</span>
+                  <span class="theme-name">keyloom dark</span>
+                  <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                </span>
+              </label>
+              <label class="theme-choice" data-keyloom-theme="light">
+                <input type="radio" name="keyloom-theme" value="light">
+                <span class="theme-tile">
+                  <span class="theme-check" aria-hidden="true">✓</span>
+                  <span class="theme-name">keyloom light</span>
+                  <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                </span>
+              </label>
+              <label class="theme-choice" data-keyloom-theme="repose-dark">
+                <input type="radio" name="keyloom-theme" value="repose-dark">
+                <span class="theme-tile">
+                  <span class="theme-check" aria-hidden="true">✓</span>
+                  <span class="theme-name">repose dark</span>
+                  <span class="theme-swatches" aria-hidden="true"><i></i><i></i><i></i></span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <p id="theme-hint" class="muted">Тема применяется сразу и сохраняется в этом браузере, включая панель Keyloom на Monkeytype.</p>
           <p id="theme-error" role="status" class="muted"></p>
         </article>
         <article class="panel settings-panel"><h2>Сбор данных</h2><label class="setting-row"><span><strong>Записывать тесты Monkeytype</strong><small>Только поле печати на monkeytype.com. После изменения начни новый тест.</small></span><input type="checkbox" id="capture-enabled" role="switch"></label><label class="setting-row"><span><strong>Профиль раскладки</strong><small>Выбирается вручную. Данные двух профилей не смешиваются.</small></span><select id="layout"><option value="default">Основная</option><option value="alternate">Альтернативная</option></select></label></article>

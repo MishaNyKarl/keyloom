@@ -3,10 +3,10 @@
   const root = document.documentElement;
   const valid = value => ['dark', 'light', 'repose-dark'].includes(value) ? value : 'dark';
   const preview = new URLSearchParams(location.search).get('demo') === '1' || !api?.runtime?.id;
+  const choices = Array.from(document.querySelectorAll('input[name="keyloom-theme"]'));
   const apply = value => {
     root.setAttribute('data-keyloom-theme', valid(value));
-    const select = document.getElementById('theme');
-    if (select) select.value = valid(value);
+    for (const choice of choices) choice.checked = choice.value === valid(value);
   };
   const report = error => {
     const output = document.getElementById('theme-error');
@@ -25,7 +25,8 @@
       if (area === 'local' && changes.theme) { revision++; apply(changes.theme.newValue); }
     });
   }
-  document.getElementById('theme')?.addEventListener('change', async event => {
+  for (const choice of choices) choice.addEventListener('change', async event => {
+    if (!event.target.checked) return;
     const theme = valid(event.target.value);
     const previous = root.getAttribute('data-keyloom-theme');
     revision++;
