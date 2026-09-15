@@ -64,13 +64,13 @@ test('transfer compares only ordinary tests in matching scope before and after t
 test('forecast requires comparable multi-day data, positive trend and similar workload', () => {
   const rows = Array.from({length:28},(_,index)=>session('trend-' + index,
     {date:now-(13-Math.floor(index/2))*DAY+index,wpm:40+Math.floor(index/2)}));
-  const estimate = l.forecast(rows,'english','default',2,70,now+100);
+  const estimate = l.forecast(rows,'english','default',2,now+100);
   assert.equal(estimate.reason,'ready');
   assert.ok(estimate.milestones.every(row=>row.latest>=row.earliest && row.earliest>0));
-  assert.equal(l.forecast(rows.slice(0,6),'english','default',2,70,now).reason,'data');
-  assert.equal(l.forecast(rows,'english','default',20,70,now+100).reason,'load');
-  assert.equal(l.forecast(rows.map(row=>({...row,wpm:50})),'english','default',2,70,now+100).reason,'trend');
-  assert.equal(l.forecast(rows.map(row=>({...row,mode:'quote'})),'english','default',2,70,now+100).reason,'data');
+  assert.equal(l.forecast(rows.slice(0,6),'english','default',2,now).reason,'data');
+  assert.equal(l.forecast(rows,'english','default',20,now+100).reason,'load');
+  assert.equal(l.forecast(rows.map(row=>({...row,wpm:50})),'english','default',2,now+100).reason,'trend');
+  assert.equal(l.forecast(rows.map(row=>({...row,mode:'quote'})),'english','default',2,now+100).reason,'data');
 });
 
 test('daily plans fit time budget, include both languages, and native URLs use correct settings', () => {
@@ -179,7 +179,7 @@ test('transfer of digits is shared between languages like the review schedule', 
 });
 
 test('every daily plan brackets each language with identical fixed warmup text', () => {
-  for (const minutes of [5,10,15,20,30,45]) {
+  for (const minutes of [5,10,15,20,25,30,35,45,60]) {
     for (const languages of ['english','russian','both']) {
       for (const goal of ['balanced','speed','accuracy','text']) {
         const plan = d.create({minutes,languages,goal},[],'default',now,'warmup');
@@ -234,4 +234,28 @@ test('warmup completion requires its own exercise and rejects interrupted runs',
   const completed = d.complete([plan],result,url);
   assert.equal(completed[0].steps[0].result.duration,28);
   assert.equal(d.complete(completed,result,url)[0].steps.filter(step => step.result).length,1);
+});
+
+test('forecast chooses independent +5 and +10 milestones for each language', () => {
+  const rows = ['english','russian'].flatMap((language, languageIndex) =>
+    Array.from({length:28}, (_, index) => session(language + index, {
+      language, date:now-(13-Math.floor(index/2))*DAY+index,
+      wpm:40 + languageIndex * 30 + Math.floor(index/2)
+    })));
+  const en = l.forecast(rows,'english','default',2,now+100);
+  const ru = l.forecast(rows,'russian','default',2,now+100);
+  for (const estimate of [en, ru]) {
+    assert.equal(estimate.reason, 'ready');
+    assert.deepEqual(Array.from(estimate.goals), [estimate.current+5, estimate.current+10]);
+    assert.deepEqual(Array.from(estimate.milestones, row => row.wpm), Array.from(estimate.goals));
+  }
+  assert.equal(ru.current-en.current, 30);
+  assert.equal(l.forecast([],'english','default',10,now).goals.length, 0);
+});
+
+test('legacy daily speed target is ignored without affecting plan options', () => {
+  const prefs = d.options({target:80, minutes:25, languages:'both'});
+  assert.equal(prefs.target, undefined);
+  assert.equal(prefs.minutes, 25);
+  assert.equal(prefs.languages, 'both');
 });

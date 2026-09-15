@@ -82,7 +82,7 @@
       return { ...item, before, after, ready: before.attempts >= 5 && after.attempts >= 5 };
     }).sort((a, b) => b.date - a.date).slice(0, 30);
   }
-  function forecast(sessions, language, layout, minutes, target, now = Date.now()) {
+  function forecast(sessions, language, layout, minutes, now = Date.now()) {
     const rows = sessions.filter(s => s.language === language && s.layout === layout &&
       s.status === 'completed' && !s.training && s.mode === 'time' && s.duration >= 50 && s.duration <= 70 &&
       s.wpm > 0 && s.accuracy >= 95 && s.date <= now && s.date >= now - 42 * DAY).sort((a, b) => a.date - b.date);
@@ -94,7 +94,8 @@
     }
     const points = [...days].map(([date, values]) => [date, KeyloomCore.median(values)]);
     const current = rows.length ? KeyloomCore.median(rows.slice(-5).map(s => s.wpm)) : null;
-    const base = { current, days: points.length, tests: rows.length, target, minutes };
+    const goals = current === null ? [] : [current + 5, current + 10];
+    const base = { current, days: points.length, tests: rows.length, goals, minutes };
     if (points.length < 7 || rows.length < 14 || points.at(-1)[0] - points[0][0] < 13 ||
       KeyloomAnalytics.day(now) - points.at(-1)[0] > 7) return { ...base, reason: 'data' };
     const slopes = [];
@@ -115,8 +116,7 @@
     if (minutes < observedMinutes * .5 || minutes > observedMinutes * 2) {
       return { ...base, reason: 'load', observedMinutes };
     }
-    const milestones = [...new Set([Math.ceil((current + 1) / 10) * 10, target])].filter(value => value > current)
-      .sort((a, b) => a - b).map(value => ({ wpm: value,
+    const milestones = goals.map(value => ({ wpm: value,
         earliest: Math.ceil((value - current) / high), latest: Math.ceil((value - current) / low) }));
     return { ...base, observedMinutes, milestones, reason: 'ready' };
   }

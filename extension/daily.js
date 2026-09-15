@@ -23,14 +23,14 @@
   }
   function options(input = {}) {
     const result = { minutes: 20, languages: 'both', goal: 'balanced', kind: 'auto', rounds: 3,
-      seconds: 60, repair: true, quote: true, repeat: true, target: 80,
+      seconds: 60, repair: true, quote: true, repeat: true,
       numbers: false, punctuation: false, targets: '', ...input };
-    if (![5,10,15,20,30,45].includes(result.minutes) ||
+    if (![5,10,15,20,25,30,35,45,60].includes(result.minutes) ||
       !['english','russian','both'].includes(result.languages) ||
       !['balanced','speed','accuracy','text'].includes(result.goal) ||
       !['auto','pairs','sequences','words','uppercase','digits','punctuation'].includes(result.kind) ||
       !Number.isInteger(result.rounds) || result.rounds < 1 || result.rounds > 5 ||
-      ![30,60,120].includes(result.seconds) || !Number.isFinite(result.target) || result.target < 10 || result.target > 300 ||
+      ![30,60,120].includes(result.seconds) ||
       typeof result.targets !== 'string' || result.targets.length > 300 ||
       ['repair','quote','repeat','numbers','punctuation'].some(key => typeof result[key] !== 'boolean')) {
       throw new Error('Проверьте параметры ежедневного плана');
@@ -51,7 +51,7 @@
     return Object.fromEntries(Object.keys(options.defaults).map(key => [key, result[key]]));
   }
   options.defaults = { minutes:20,languages:'both',goal:'balanced',kind:'auto',rounds:3,seconds:60,
-    repair:true,quote:true,repeat:true,target:80,numbers:false,punctuation:false,targets:'' };
+    repair:true,quote:true,repeat:true,numbers:false,punctuation:false,targets:'' };
   function create(input, sessions, layout, now = Date.now(), id = crypto.randomUUID()) {
     const prefs = options(input);
     const languages = prefs.languages === 'both' ? ['english','russian'] : [prefs.languages];

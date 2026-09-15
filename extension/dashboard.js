@@ -201,7 +201,7 @@
       legend.append(item);
     };
     addLegend('мало данных', null);
-    const percent = value => (value * 100).toLocaleString('ru-RU', {maximumFractionDigits:3}) + '%';
+    const percent = value => (value * 100).toLocaleString('ru-RU', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
     for (const bin of scale.bins) {
       const label = scale.min === scale.max ? percent(bin.min) + ' у всех' :
         percent(bin.min) + (bin.level === 3 ? '–' : '–<') + percent(bin.max);
@@ -412,7 +412,7 @@
       ...KeyloomLearning.vocabulary(state.learning, $('language').value, state.settings.layout)];
   }
   function setDailyFields(prefs) {
-    for (const key of ['goal','minutes','languages','target','kind','rounds','seconds','targets']) {
+    for (const key of ['goal','minutes','languages','kind','rounds','seconds','targets']) {
       $('daily-' + key).value = String(prefs[key]);
     }
     for (const key of ['repair','quote','repeat','numbers','punctuation']) {
@@ -422,7 +422,7 @@
   function dailyOptions() {
     const prefs = {};
     for (const key of ['goal','languages','kind','targets']) prefs[key] = $('daily-' + key).value;
-    for (const key of ['minutes','target','rounds','seconds']) prefs[key] = Number($('daily-' + key).value);
+    for (const key of ['minutes','rounds','seconds']) prefs[key] = Number($('daily-' + key).value);
     for (const key of ['repair','quote','repeat','numbers','punctuation']) prefs[key] = $('daily-' + key).checked;
     return KeyloomDaily.options(prefs);
   }
@@ -479,10 +479,10 @@
     $('daily-forecast').replaceChildren();
     for (const language of languages) {
       const estimate = KeyloomLearning.forecast(state.sessions, language, state.settings.layout,
-        prefs.minutes / languages.length, prefs.target);
+        prefs.minutes / languages.length);
       const article = document.createElement('article');
       const heading = document.createElement('strong');
-      heading.textContent = `${language === 'russian' ? 'Русский' : 'English'} · ${prefs.minutes / languages.length} мин/день → цель ${prefs.target} WPM`;
+      heading.textContent = `${language === 'russian' ? 'Русский' : 'English'} · ${prefs.minutes / languages.length} мин/день`;
       const text = document.createElement('p');
       const reasons = {
         data: `Собираем базу: ${estimate.tests} контрольных тестов, ${estimate.days} дней. Для прогноза нужны 14 минутных time-тестов с точностью ≥95%, минимум 7 разных дней за период от 14 дней; последний — не старше недели.`,
@@ -500,22 +500,21 @@
       if (estimate.reason !== 'ready') {
         const calibration = document.createElement('span');
         calibration.textContent = '→ Регулярные минутные контрольные тесты';
-        const goal = document.createElement('span');
-        goal.textContent = `→ ${prefs.target} WPM · срок появится по данным`;
-        flow.append(calibration, goal);
+        flow.append(calibration);
+        for (const value of estimate.goals) {
+          const goal = document.createElement('span');
+          goal.textContent = `→ ${format(value, 1)} WPM · срок появится по данным`;
+          flow.append(goal);
+        }
       }
       for (const milestone of estimate.milestones ?? []) {
         const point = document.createElement('span');
-        point.textContent = milestone.latest > 180 ? `→ ${milestone.wpm} WPM: за пределами надёжного горизонта в 6 месяцев` :
+        point.textContent = milestone.latest > 180 ? `→ ${format(milestone.wpm, 1)} WPM: за пределами надёжного горизонта в 6 месяцев` :
           `→ ${milestone.wpm} WPM: ориентировочно ${Math.max(1, Math.ceil(milestone.earliest / 7))}–${Math.max(1, Math.ceil(milestone.latest / 7))} недель`;
         flow.append(point);
       }
       article.append(flow);
-      if (estimate.current >= prefs.target) {
-        const achieved = document.createElement('p');
-        achieved.textContent = 'Текущая оценка уже достигает выбранной цели. Закрепи её в обычных тестах.';
-        article.append(achieved);
-      }
+
       $('daily-forecast').append(article);
     }
     const due = KeyloomLearning.due(state.learning, $('language').value, state.settings.layout);
