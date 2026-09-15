@@ -259,3 +259,45 @@ test('full daily route replays warmup text and returns final comparison', async 
     }
   }
 });
+
+test('resume today opens planner for absent, unstarted, old or completed plans', async () => {
+  const h = await harness();
+  const page = 'chrome-extension://test-extension/dashboard.html';
+  await h.send({type:'RESUME_TODAY'});
+  assert.ok(h.opened.at(-1).endsWith('#daily'));
+  await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english'}},page);
+  const plan = h.storage.dailies[0];
+  await h.send({type:'RESUME_TODAY'});
+  assert.ok(h.opened.at(-1).endsWith('#daily'));
+  plan.steps[0].startedAt = Date.now();
+  plan.day -= 1;
+  await h.send({type:'RESUME_TODAY'});
+  assert.ok(h.opened.at(-1).endsWith('#daily'));
+  plan.day += 1;
+  for (const step of plan.steps) step.result = {id:'done'};
+  await h.send({type:'RESUME_TODAY'});
+  assert.ok(h.opened.at(-1).endsWith('#daily'));
+  assert.equal(h.updated.length, 0);
+});
+
+for (const firefox of [false, true]) {
+  test('resume today restarts the first unfinished step in the Monkeytype tab: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const page = (firefox ? 'moz' : 'chrome') + '-extension://test-extension/dashboard.html';
+    await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english'}},page);
+    const plan = h.storage.dailies[0];
+    plan.steps[0].startedAt = Date.now();
+    plan.steps[0].result = {id:'completed'};
+    plan.steps[1].startedAt = Date.now() - 1000;
+    const reply = await h.send({type:'RESUME_TODAY'});
+    assert.equal(reply.ok, true);
+    assert.equal(reply.started, true);
+    assert.equal(h.updated.at(-1).id, 7);
+    assert.equal(new URL(h.updated.at(-1).url).searchParams.get('keyloomStep'), plan.steps[1].id);
+    assert.equal(h.storage.dailies[0].steps[0].result.id, 'completed');
+    const opened = await h.send({type:'RESUME_TODAY'},page);
+    assert.equal(opened.started, true);
+    assert.equal(new URL(h.opened.at(-1)).searchParams.get('keyloomStep'), plan.steps[1].id);
+    assert.equal(await h.send({type:'RESUME_TODAY'},'https://example.com/'), undefined);
+  });
+}

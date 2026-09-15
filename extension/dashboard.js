@@ -803,9 +803,12 @@
     ...[['overview','Обзор'],['practice','Прицельная практика'],['daily','Ежедневный план'],
       ['statistics','Статистика'],['history','История'],['settings','Настройки']]
       .map(([view,label]) => ({label,alias:view,run:() => navigate(view)})),
-    {label:'Запустить следующий шаг плана',alias:'start next daily',
-      available:() => installed && !demo && Boolean(activeDaily()?.steps.find(step => !step.result)),
-      run:async () => { await message({type:'START_DAILY',id:activeDaily().id}); await load(); }},
+    {label:'Продолжить сегодняшний план',alias:'start next daily сегодня создать продолжить',
+      run:async () => {
+        if (!installed || demo) { navigate('daily'); return; }
+        await message({type:'RESUME_TODAY'});
+        await load();
+      }},
     {label:'Настроить прицельную практику',alias:'custom practice',
       run:() => { showView('practice'); $('practice-customize').click(); }},
     {label:'Выбрать тему',alias:'theme appearance',run:() => {

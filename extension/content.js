@@ -209,8 +209,8 @@
           run:advance},
         {label:'Открыть Keyloom', alias:'dashboard overview', key:'KeyO',
           run:() => pendingSave.then(() => send({type:'OPEN_DASHBOARD',sessionId:lastSavedId}))},
-        {label:'Ежедневный план', alias:'daily plan',
-          run:() => send({type:'OPEN_DASHBOARD',view:'daily'})}
+        {label:'Продолжить сегодняшний план', alias:'daily plan сегодня создать продолжить',
+          run:() => pendingSave.then(() => send({type:'RESUME_TODAY'}))}
       ]
     });
     const menu = document.createElement('button');

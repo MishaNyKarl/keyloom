@@ -96,8 +96,19 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       await extensionApi.tabs.create({ url: extensionApi.runtime.getURL('dashboard.html')+suffix });
       return { opened: true };
     }
+    const resuming = message.type === 'RESUME_TODAY';
+    const todayPlan = resuming ? dailies.filter(plan =>
+      plan.day === KeyloomAnalytics.day(Date.now()) && plan.layout === settings.layout &&
+      plan.steps.some(step => step.startedAt) && plan.steps.some(step => !step.result)).at(-1) : null;
+    if (resuming && !todayPlan) {
+      await extensionApi.tabs.create({url:extensionApi.runtime.getURL('dashboard.html') + '#daily'});
+      return {opened:true};
+    }
+    if (resuming && fromMonkeytype && !Number.isInteger(sender.tab?.id)) {
+      throw new Error('Не удалось определить вкладку тренировки');
+    }
     const continuing = message.type === 'NEXT_DAILY' && fromMonkeytype;
-    if (!fromExtension && !continuing) throw new Error('Недоступная операция');
+    if (!fromExtension && !continuing && !resuming) throw new Error('Недоступная операция');
     if (message.type === 'CREATE_DAILY') {
       const plan = KeyloomDaily.create(message.options, sessions, settings.layout);
       if (plan.prefs.targets) {
@@ -108,13 +119,13 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       await extensionApi.storage.local.set({dailies:[...dailies, plan].slice(-30), dailyPrefs:plan.prefs});
       return {plan};
     }
-    if (message.type === 'START_DAILY' || continuing) {
+    if (message.type === 'START_DAILY' || continuing || resuming) {
       if (!settings.enabled) throw new Error('Включите запись тестов перед тренировкой');
       const params = continuing ? new URL(sender.url).searchParams : null;
       if (continuing && (!Number.isInteger(sender.tab?.id) || !dailyContinuation(dailies, sender.url))) {
         throw new Error('Сначала завершите текущий шаг плана');
       }
-      const daily = dailies.find(plan => plan.id === (continuing ? params.get('keyloomDaily') : message.id));
+      const daily = todayPlan ?? dailies.find(plan => plan.id === (continuing ? params.get('keyloomDaily') : message.id));
       if (!daily || daily.layout !== settings.layout) throw new Error('План не найден для текущей раскладки');
       const step = daily.steps.find(row => !row.result);
       if (!step) throw new Error('Все шаги плана уже завершены');
@@ -138,7 +149,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       const destination = {url:url + '&keyloomDaily=' + encodeURIComponent(daily.id) +
         '&keyloomStep=' + encodeURIComponent(step.id)};
       try {
-        if (continuing) await extensionApi.tabs.update(sender.tab.id, destination);
+        if (continuing || (resuming && fromMonkeytype)) await extensionApi.tabs.update(sender.tab.id, destination);
         else await extensionApi.tabs.create(destination);
       } catch (error) {
         await extensionApi.storage.local.set({dailies:previousDailies, exercises});
