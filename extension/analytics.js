@@ -124,5 +124,21 @@
     ticks.push(Number(max.toFixed(6)));
     return { min, max, ticks };
   }
-  globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan,chartScale});
+  function keyboardScale(rows) {
+    const valid = rows.map(row => row && Number.isFinite(row.attempts) &&
+      row.attempts >= 5 && Number.isFinite(row.errorRate) &&
+      row.errorRate >= 0 && row.errorRate <= 1 ? row.errorRate : null);
+    const rates = valid.filter(value => value !== null);
+    if (!rates.length) return {min:null, max:null, levels:valid, bins:[]};
+    const min = Math.min(...rates);
+    const max = Math.max(...rates);
+    const span = max - min;
+    const levels = valid.map(value => value === null ? null : span === 0 ? 0 :
+      Math.min(3, Math.floor((value - min) / span * 4)));
+    const bins = span === 0 ? [{level:0, min, max}] : Array.from({length:4}, (_, level) => ({
+      level, min:min + span * level / 4, max:min + span * (level + 1) / 4
+    }));
+    return {min, max, levels, bins};
+  }
+  globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan,chartScale,keyboardScale});
 })();

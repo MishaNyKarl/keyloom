@@ -188,12 +188,33 @@
   function renderKeyboard() {
     const keys = $('language').value === 'russian' ? ['йцукенгшщзх','фывапролджэ','ячсмитьбюё'] : ['qwertyuiop','asdfghjkl','zxcvbnm'];
     const stats = new Map(currentProfile.chars.map(row => [row.key, row]));
+    const letters = [...keys.join('')];
+    const scale = analytics.keyboardScale(letters.map(letter => stats.get(letter)));
+    const levels = new Map(letters.map((letter, index) => [letter, scale.levels[index]]));
+    const legend = $('keyboard-legend');
+    legend.replaceChildren();
+    const addLegend = (label, level) => {
+      const item = document.createElement('span');
+      if (level === null) item.className = 'no-data';
+      else item.dataset.level = String(level);
+      item.append(document.createElement('i'), document.createTextNode(label));
+      legend.append(item);
+    };
+    addLegend('мало данных', null);
+    const percent = value => (value * 100).toLocaleString('ru-RU', {maximumFractionDigits:3}) + '%';
+    for (const bin of scale.bins) {
+      const label = scale.min === scale.max ? percent(bin.min) + ' у всех' :
+        percent(bin.min) + (bin.level === 3 ? '–' : '–<') + percent(bin.max);
+      addLegend(label, bin.level);
+    }
+    legend.title = 'Относительная шкала ошибок среди показанных букв с 5 и более попытками';
     $('keyboard').replaceChildren(...keys.map(text => {
       const row = document.createElement('div'); row.className = 'key-row';
       for (const letter of text) {
         const data = stats.get(letter), key = document.createElement('span'); key.className = 'key'; key.textContent = letter;
-        key.dataset.level = !data || data.attempts < 5 ? '0' : data.errorRate >= .15 ? '3' : data.errorRate >= .06 ? '2' : data.errorRate > 0 ? '1' : '0';
-        if (!data || data.attempts < 5) key.classList.add('no-data');
+        const level = levels.get(letter);
+        key.dataset.level = String(level ?? 0);
+        if (level === null) key.classList.add('no-data');
         key.title = data ? `${letter}: ${data.errors} ошибок / ${data.attempts} первых попыток${data.attempts < 5 ? ' · мало данных' : ''}` : `${letter}: нет данных`;
         key.setAttribute('aria-label', key.title); row.append(key);
       }

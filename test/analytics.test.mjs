@@ -59,3 +59,37 @@ test('chart scale handles flat, empty, zero and accuracy boundary data', () => {
     for (const value of values) assert.ok(value >= scale.min && value <= scale.max);
   }
 });
+
+test('keyboard scale spreads a narrow error range across four colors', () => {
+  const rows = [.01, .02, .03, .04].map(errorRate => ({attempts:100, errorRate}));
+  const scale = a.keyboardScale(rows);
+  assert.equal(scale.min, .01);
+  assert.equal(scale.max, .04);
+  assert.deepEqual(Array.from(scale.levels), [0, 1, 2, 3]);
+  assert.equal(scale.bins[0].min, .01);
+  assert.equal(scale.bins[3].max, .04);
+});
+
+test('keyboard scale excludes sparse and invalid data from extrema', () => {
+  const scale = a.keyboardScale([
+    {attempts:5, errorRate:.02}, {attempts:20, errorRate:.04},
+    {attempts:4, errorRate:1}, null, {attempts:10, errorRate:NaN},
+    {attempts:10, errorRate:-1}, {attempts:10, errorRate:2}
+  ]);
+  assert.equal(scale.min, .02);
+  assert.equal(scale.max, .04);
+  assert.deepEqual(Array.from(scale.levels), [0, 3, null, null, null, null, null]);
+});
+
+test('keyboard scale handles empty, equal and exact boundary values', () => {
+  assert.equal(a.keyboardScale([]).bins.length, 0);
+  for (const errorRate of [0, .02, 1]) {
+    const scale = a.keyboardScale([{attempts:10, errorRate}, {attempts:5, errorRate}]);
+    assert.equal(scale.min, errorRate);
+    assert.equal(scale.max, errorRate);
+    assert.equal(scale.bins.length, 1);
+    assert.deepEqual(Array.from(scale.levels), [0, 0]);
+  }
+  const scale = a.keyboardScale([0, .25, .5, .75, 1].map(errorRate => ({attempts:5,errorRate})));
+  assert.deepEqual(Array.from(scale.levels), [0, 1, 2, 3, 3]);
+});
