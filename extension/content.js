@@ -52,7 +52,7 @@
     if (widget.isConnected === false) document.body.append(widget);
     widget.setAttribute('data-typing', String(Boolean(session)));
     widget.inert = Boolean(session);
-    widget.setAttribute('data-keyloom-theme', ['dark','light','repose-dark'].includes(theme) ? theme : 'dark');
+    widget.setAttribute('data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
     panel.setAttribute('data-typing', String(Boolean(session)));
     panel.inert = Boolean(session);
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;

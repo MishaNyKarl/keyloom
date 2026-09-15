@@ -7,7 +7,7 @@ const source = await readFile(new URL('../extension/theme.js', import.meta.url),
 const settle = () => new Promise(resolve => setImmediate(resolve));
 async function harness(namespace = 'chrome', initial = 'light', preview = false) {
   const attributes = {};
-  const choices = ['dark','light','repose-dark'].map(value => ({value,
+  const choices = ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].map(value => ({value,
     addEventListener(event, callback) { this[event] = callback; }}));
   const select = {get value() { return choices.find(choice => choice.checked)?.value; },
     async change(event) {
@@ -73,3 +73,15 @@ test('fonts are local WOFF2 assets and content resources are limited to Monkeyty
   const license = await readFile(new URL('../extension/fonts/OFL.txt', import.meta.url),'utf8');
   assert.match(license,/SIL OPEN FONT LICENSE/);
 });
+
+for (const theme of ['lime', 'honey', 'dualshot', 'trackday']) {
+  test('additional theme persists and restores: ' + theme, async () => {
+    const h = await harness();
+    await h.select.change({target:{value:theme}});
+    assert.equal(h.saved.theme, theme);
+    assert.equal(h.attributes['data-keyloom-theme'], theme);
+    const reopened = await harness('browser', h.saved.theme);
+    assert.equal(reopened.select.value, theme);
+    assert.equal(reopened.choices.filter(choice => choice.checked).length, 1);
+  });
+}

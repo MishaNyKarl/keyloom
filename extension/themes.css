@@ -23,10 +23,6 @@
   --accent: #d5e7a2;
   --on-accent: #222b17;
   --error: #f0b49c;
-  --heat-1: #3b442f;
-  --heat-2: #706648;
-  --heat-3: #8a6249;
-  --heat-text: #ffebc0;
   --scheme: dark;
   color-scheme: var(--scheme);
 }
@@ -40,10 +36,6 @@
   --accent: #486438;
   --on-accent: #ffffff;
   --error: #a13f30;
-  --heat-1: #d4dfc8;
-  --heat-2: #ecce96;
-  --heat-3: #dda58b;
-  --heat-text: #3d2c20;
   --scheme: light;
 }
 [data-keyloom-theme='repose-dark'] {
@@ -56,8 +48,61 @@
   --accent: #d6d2bc;
   --on-accent: #2f3338;
   --error: #e0a697;
-  --heat-1: #555a54;
-  --heat-2: #786f56;
-  --heat-3: #916854;
-  --heat-text: #f2e4c8;
+}
+
+[data-keyloom-theme='lime'] {
+  --bg: #7d8990;
+  --panel: #707c83;
+  --surface: #667179;
+  --border: #485056;
+  --text: #bfcfdb;
+  --muted: #394349;
+  --accent: #a1ce45;
+  --on-accent: #293319;
+  --error: #70251e;
+}
+
+[data-keyloom-theme='honey'] {
+  --bg: #f2aa00;
+  --panel: #df9b00;
+  --surface: #cb8a00;
+  --border: #a66b00;
+  --text: #fff4cc;
+  --muted: #694500;
+  --accent: #fff546;
+  --on-accent: #573900;
+  --error: #852c20;
+}
+
+[data-keyloom-theme='dualshot'] {
+  --bg: #737373;
+  --panel: #686868;
+  --surface: #626262;
+  --border: #414242;
+  --text: #ededed;
+  --muted: #eeeeee;
+  --accent: #212222;
+  --on-accent: #eeeeee;
+  --error: #ffd0cb;
+}
+
+[data-keyloom-theme='trackday'] {
+  --bg: #454d66;
+  --panel: #3b4259;
+  --surface: #343c50;
+  --border: #626f8f;
+  --text: #cfcfcf;
+  --muted: #afc2e2;
+  --accent: #e0513e;
+  --on-accent: #151923;
+  --error: #ffada0;
+}
+
+/* Accuracy colors encode error rate, independently of decorative theme accents. */
+[data-keyloom-theme] {
+  --heat-0: #a8cfb0;
+  --heat-1: #edd487;
+  --heat-2: #efa76e;
+  --heat-3: #e77979;
+  --heat-text: #252522;
 }

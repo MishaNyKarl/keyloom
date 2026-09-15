@@ -1,7 +1,7 @@
 (() => {
   const api = globalThis.browser ?? globalThis.chrome;
   const root = document.documentElement;
-  const valid = value => ['dark', 'light', 'repose-dark'].includes(value) ? value : 'dark';
+  const valid = value => ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(value) ? value : 'dark';
   const preview = new URLSearchParams(location.search).get('demo') === '1' || !api?.runtime?.id;
   const choices = Array.from(document.querySelectorAll('input[name="keyloom-theme"]'));
   const apply = value => {

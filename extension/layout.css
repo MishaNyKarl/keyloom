@@ -117,3 +117,34 @@ select, .custom-grid input, #sync-form input, textarea { border-color: var(--sur
 }
 
 h1[tabindex="-1"]:focus { outline: none; }
+
+.key[data-level] {
+  color: var(--heat-text);
+}
+.key[data-level="0"] {
+  background: var(--heat-0);
+}
+.key.no-data {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px dashed var(--border);
+}
+.heat-legend {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 10px;
+}
+.heat-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+}
+.heat-legend i { background: var(--heat-0); }
+.heat-legend [data-level="1"] i { background: var(--heat-1); }
+.heat-legend [data-level="2"] i { background: var(--heat-2); }
+.heat-legend [data-level="3"] i { background: var(--heat-3); }
+.heat-legend .no-data i {
+  background: var(--panel);
+  border: 1px dashed var(--border);
+}
