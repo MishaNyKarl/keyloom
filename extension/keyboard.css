@@ -1,18 +1,18 @@
 #keyloom-command-menu {
   box-sizing: border-box;
-  width: calc(100vw - 32px);
+  width: calc(100vw - 4rem);
   max-width: 600px;
   outline: none;
   box-shadow: 0 0 0 .2em #0000;
   transition: outline .125s;
-  max-height: 80vh;
-  margin: 8vh auto auto;
+  max-height: calc(100vh - 8rem);
+  margin: 6rem auto auto;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: .5rem;
   background: var(--bg-color, var(--bg));
   color: var(--sub-color, var(--muted));
-  font: 1rem/1.5 var(--mono);
+  font: 1rem/1.25 var(--mono);
   overflow: hidden;
 }
 #keyloom-command-menu[open] {
@@ -29,8 +29,8 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
+  gap: 0;
+  padding: 0;
 }
 .keyloom-command-search::before {
   content: '';
@@ -45,14 +45,15 @@
   min-width: 0;
   width: 100%;
   margin: 0;
-  padding: 0 4px;
+  padding: 1rem 1rem 1rem 0;
   border: 0;
   outline: none;
   border-radius: 0;
   background: transparent;
   color: var(--text-color, var(--text));
   caret-color: var(--main-color, var(--accent));
-  font-size: 1em;
+  font-size: 1rem;
+  line-height: 1.25;
 }
 #keyloom-command-menu input::placeholder {
   color: var(--sub-color, var(--muted));
@@ -66,38 +67,40 @@
   background: transparent;
 }
 #keyloom-command-menu .keyloom-command-search button {
-  padding: 4px;
-  font-size: .75em;
+  padding: .5em;
+  margin-right: 1rem;
+  font-size: .75rem;
 }
 .keyloom-command-list {
-  max-height: calc(80vh - 76px);
+  max-height: calc(100vh - 15rem);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--sub-color, var(--muted)) transparent;
-  padding-bottom: 8px;
+  padding-bottom: 0;
 }
 #keyloom-command-menu .keyloom-command-list button {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: .5rem;
   width: 100%;
-  padding: 6px 20px;
+  padding: .5rem 1rem;
   justify-content: flex-start;
   text-align: left;
-  font-size: .75em;
+  font-size: .75rem;
+  line-height: .75rem;
 }
 .keyloom-command-list button::before {
   content: '';
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: .75rem;
+  height: .75rem;
+  flex: 0 0 .75rem;
   background: currentColor;
   mask: url('icons/lucide/command.svg') center / contain no-repeat;
 }
 #keyloom-command-menu button:hover,
 #keyloom-command-menu button:focus-visible,
 #keyloom-command-menu:has(input:focus) .keyloom-command-list button:first-child {
-  background: var(--main-color, var(--accent));
+  background: var(--text-color, var(--text));
   color: var(--bg-color, var(--on-accent));
   outline: none;
 }
@@ -231,4 +234,5 @@ body:has(#keyloom-widget) .full-width:has(> #ad-result-wrapper) {
   width: 1em;
   height: 1em;
   flex-basis: 1em;
+  margin: 1px 1rem 0;
 }
