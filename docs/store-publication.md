@@ -1,6 +1,6 @@
 # Публикация Keyloom в магазинах
 
-Состояние на 15 сентября 2026: Firefox 0.7.3 отправлен в AMO с исходным архивом. Статус: «Ожидает проверки». Первоначальный черновик 0.7.2 отключён; в 0.7.3 заявлен только Firefox desktop 142+.
+Состояние на 15 сентября 2026: Firefox 0.8.0 отправлен в AMO с исходным архивом и примечаниями к версии. Статус: «Ожидает проверки». ID версии: 6488111, файл: 5032273. Локальная проверка и валидатор AMO: 0 ошибок и предупреждений. Исходный commit: fe9e105 в main. Заявлен Firefox desktop 142+, без Android. Архивы ранее отправленной 0.7.3 сохранены отдельно.
 CI/CD сейчас обновляет личный API; он не публикует расширения в магазинах автоматически.
 
 ## Что подготовить в продукте
@@ -49,8 +49,8 @@ CI/CD сейчас обновляет личный API; он не публику
 PowerShell, после подготовки:
 
 ```powershell
-Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-0.7.3.zip -Force
-Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-0.7.3.zip -Force
+Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-0.8.0.zip -Force
+Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-0.8.0.zip -Force
 ```
 
 В пакет для установки загружается первый ZIP. Второй — в поле исходников для ревью.
