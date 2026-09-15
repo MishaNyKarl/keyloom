@@ -61,7 +61,8 @@
       .sort((a, b) => a.date - b.date);
     const targets = new Map();
     for (const session of rows) {
-      if (session.language !== language || !session.training) continue;
+      if (!session.training) continue;
+      if (session.language !== language && !['digits','punctuation'].includes(session.training.kind)) continue;
       for (const target of session.training.targets) {
         targets.set(session.training.kind + ':' + target, { kind: session.training.kind, target, date: session.date });
       }

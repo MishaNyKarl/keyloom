@@ -163,3 +163,14 @@ test('every goal retains a minute baseline so daily practice can calibrate the f
     }
   }
 });
+
+test('transfer of digits is shared between languages like the review schedule', () => {
+  const rows = [session('before-digit',{date:now-DAY,digits:{'1':metric(2)}}),
+    trained('digit',{digits:{'1':metric()},training:{id:'digits',kind:'digits',targets:['1'],seconds:60}}),
+    session('after-digit',{date:now+DAY,language:'russian',digits:{'1':metric(1)}})];
+  const result = l.transfer(rows,'russian','default')[0];
+  assert.equal(result.target,'1');
+  assert.equal(result.ready,true);
+  assert.equal(result.before.error,.2);
+  assert.equal(result.after.error,.1);
+});
