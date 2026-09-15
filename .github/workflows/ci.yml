@@ -39,6 +39,9 @@ jobs:
           node scripts/check.mjs artifacts/firefox
       - name: Check whitespace
         run: git diff --check
+      - name: Validate Firefox submission with Mozilla web-ext
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
+        run: npx --yes --package web-ext@10.6.0 web-ext lint --source-dir artifacts/firefox --warnings-as-errors
 
   deploy:
     name: Deploy private API

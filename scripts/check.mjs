@@ -21,7 +21,8 @@ const background = manifest.background.scripts ?? [manifest.background.service_w
 for (const file of [...manifest.content_scripts.flatMap(s => s.js), ...background, manifest.action.default_popup, manifest.options_page, 'vendor/lz-string.js', 'vendor/lz-string.LICENSE']) {
   await access(path.join(root, file));
 }
-for (const page of ['dashboard.html', 'popup.html']) {
+for (const icon of Object.values(manifest.icons ?? {})) await access(path.join(root, icon));
+for (const page of ['dashboard.html', 'popup.html', 'privacy.html']) {
   const html = await readFile(path.join(root, page), 'utf8');
   for (const match of html.matchAll(/(?:src|href)="([^"#]+\.(?:js|css))"/g)) await access(path.join(root, match[1]));
   if (/\son\w+\s*=|<script\b[^>]*>\s*[^<\s]/i.test(html)) throw new Error('Inline scripts are incompatible with extension CSP');

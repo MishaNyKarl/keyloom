@@ -52,6 +52,7 @@ test('wrong port immediately shows persistent, copyable diagnostics without secr
 test('connect displays progress, blocks double submission and reports permission denial', async () => {
   const h = await harness();
   let permission;
+  h.elements['sync-url'].value = 'https://192.0.2.1:8443';
   h.api.permissions.request = () => new Promise(resolve => { permission = resolve; });
   h.elements['sync-token'].value = 'synthetic-token-with-more-than-32-characters';
   const pending = h.submit();

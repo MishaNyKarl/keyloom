@@ -9,6 +9,7 @@ export function firefoxManifest(chromium) {
     scripts: ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'sync.js', 'background.js']
   };
   manifest.browser_specific_settings = {
+    gecko_android: { strict_min_version: '142.0' },
     gecko: {
       id: 'keyloom@mishanykarl',
       strict_min_version: '140.0',

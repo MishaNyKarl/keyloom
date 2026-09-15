@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keyloom — персональные тренировки печати",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Персональные тренировки по ошибкам Monkeytype. Локальная статистика и синхронизация с личным сервером.",
   "permissions": [
     "storage",
@@ -11,10 +11,12 @@
     "service_worker": "background.js"
   },
   "action": {
+    "default_icon": { "48": "icons/keyloom-48.png", "96": "icons/keyloom-96.png" },
     "default_popup": "popup.html",
     "default_title": "Keyloom"
   },
   "options_page": "dashboard.html",
+  "icons": { "48": "icons/keyloom-48.png", "96": "icons/keyloom-96.png", "128": "icons/keyloom-128.png" },
   "content_scripts": [
     {
       "matches": [

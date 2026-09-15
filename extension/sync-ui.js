@@ -26,7 +26,7 @@
       const { sync = {} } = await message({ type: 'GET_STATE' });
       if (busy) return;
       if (!initialized) {
-        if (!$('sync-url').value) $('sync-url').value = sync.url || 'https://45.11.229.77:8443';
+        if (!$('sync-url').value) $('sync-url').value = sync.url || '';
         initialized = true;
       }
       $('sync-now').disabled = !sync.enabled;
