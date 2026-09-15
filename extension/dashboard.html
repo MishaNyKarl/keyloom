@@ -4,6 +4,9 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark"><title>Keyloom · твой ритм печати</title>
   <link rel="stylesheet" href="dashboard.css">
+  <script src="diagnostics.js" defer></script>
+  <script src="sync.js" defer></script>
+  <script src="sync-ui.js" defer></script>
   <script src="core.js" defer></script><script src="words.js" defer></script>
   <script src="analytics.js" defer></script>
   <script src="practice-options.js" defer></script>
@@ -24,7 +27,7 @@
     <div class="sidebar-bottom">
       <div class="local-card"><span class="status-dot"></span><strong>Твоя история под контролем</strong><p>Локально и на твоём сервере,<br>если включена синхронизация.</p></div>
       <a href="https://monkeytype.com" target="_blank" rel="noreferrer" class="monkey-link">Открыть Monkeytype <span>↗</span></a>
-      <div class="version">KEYLOOM <span>v0.7.0</span></div>
+      <div class="version">KEYLOOM <span>v0.7.1</span></div>
     </div>
   </aside>
   <main>
@@ -80,7 +83,7 @@
         <article class="panel settings-panel">
           <h2>Синхронизация с сервером</h2>
           <p class="muted">При подключении история тестов, статистика букв и слов, время и результаты тренировок передаются на указанный сервер. Журнал нажатий не отправляется. Ключ даёт доступ ко всей твоей истории: используй один ключ только в своих браузерах.</p>
-          <form id="sync-form">
+          <form id="sync-form" novalidate>
             <label class="setting-row"><span>HTTPS-адрес сервера</span><input id="sync-url" type="url" placeholder="https://45.11.229.77:8443" required></label>
             <label class="setting-row"><span>Личный ключ доступа</span><input id="sync-token" type="password" autocomplete="off" minlength="32" maxlength="256" required></label>
             <div class="exercise-actions">
@@ -132,5 +135,15 @@
       </div>
     </form>
   </dialog>
+  <aside id="diagnostics" class="diagnostics" role="alert" hidden>
+    <strong>Ошибка Keyloom</strong>
+    <p id="diagnostics-message"></p>
+    <label for="diagnostics-text">Диагностика для отправки · без ключа и истории</label>
+    <textarea id="diagnostics-text" readonly rows="8"></textarea>
+    <div class="exercise-actions">
+      <button id="diagnostics-copy" class="secondary" type="button">Скопировать диагностику</button>
+      <button id="diagnostics-close" class="secondary" type="button">Закрыть</button>
+    </div>
+  </aside>
 </body>
 </html>

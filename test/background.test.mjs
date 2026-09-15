@@ -60,7 +60,9 @@ test('sync consent is extension-only, secrets stay private, failed sync preserve
   assert.equal((await h.send({ type: 'DISCONNECT_SYNC' })).ok, false);
   h.context.fetch = async () => { throw new Error('offline'); };
   await h.send({ type: 'SAVE_SESSION', session: h.session('offline') });
-  await h.send({ type: 'SYNC_NOW' }, page);
+  const failed = await h.send({ type: 'SYNC_NOW' }, page);
+  assert.equal(failed.synchronized, false);
+  assert.equal(failed.errorCode, 'NETWORK_ERROR');
   assert.equal(h.storage.sessions.length, 2);
   assert.ok(h.storage.syncStatus.error);
   await h.send({ type: 'DISCONNECT_SYNC' }, page);

@@ -12,18 +12,21 @@ function syncPermissions(config) {
 }
 async function synchronize() {
   const { syncConfig, sessions = [] } = await extensionApi.storage.local.get(['syncConfig', 'sessions']);
-  if (!syncConfig?.enabled) return;
+  if (!syncConfig?.enabled) return { synchronized: false, errorCode: 'SYNC_DISABLED' };
   try {
     if (!await extensionApi.permissions.contains(syncPermissions(syncConfig))) {
-      throw new Error('Sync permission revoked');
+      throw Object.assign(new Error('Sync permission revoked'), { code: 'PERMISSION_DENIED' });
     }
     const result = await KeyloomSync.exchange(syncConfig, sessions);
     await extensionApi.storage.local.set({ sessions: result.sessions,
       syncStatus: { date: Date.now(), total: result.total, error: null } });
-  } catch {
+    return { synchronized: true };
+  } catch (error) {
     const { syncStatus = {} } = await extensionApi.storage.local.get('syncStatus');
     await extensionApi.storage.local.set({ syncStatus: { ...syncStatus,
-      error: 'Не удалось синхронизировать. Проверьте соединение и ключ; повторим автоматически.' } });
+      error: 'Не удалось синхронизировать. Проверьте соединение и ключ; повторим автоматически.',
+      errorCode: error.code ?? 'NETWORK_ERROR' } });
+    return { synchronized: false, errorCode: error.code ?? 'NETWORK_ERROR' };
   }
 }
 function scheduleSync() {
@@ -70,7 +73,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === 'CONNECT_SYNC') {
       const config = KeyloomSync.configuration(message.config);
       if (!await extensionApi.permissions.contains(syncPermissions(config))) {
-        throw new Error('Разрешите расширению подключение к серверу');
+        throw Object.assign(new Error('Разрешите расширению подключение к серверу'), { code: 'PERMISSION_DENIED' });
       }
       const result = await KeyloomSync.exchange(config, sessions);
       await extensionApi.storage.local.set({ syncConfig: config, sessions: result.sessions,
@@ -82,8 +85,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       return { disconnected: true };
     }
     if (message.type === 'SYNC_NOW') {
-      await synchronize();
-      return { synchronized: true };
+      return await synchronize();
     }
     if(message.type==='START_PRACTICE'){
       if(!settings.enabled)throw new Error('Включите запись тестов перед тренировкой');
@@ -107,6 +109,6 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     }
     throw new Error('Неизвестная операция');
   });
-  queue.then(data => respond({ ok: true, ...data }), error => respond({ ok: false, error: error.message }));
+  queue.then(data => respond({ ok: true, ...data }), error => respond({ ok: false, error: error.message, code: error.code }));
   return true;
 });

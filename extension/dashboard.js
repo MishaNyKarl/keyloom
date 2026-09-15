@@ -38,15 +38,8 @@
       $('capture-enabled').checked = state.settings.enabled;
       $('capture-enabled').disabled = demo || !installed;
       $('layout').value = state.settings.layout;
-      const sync = state.sync ?? {};
-      if (document.activeElement !== $('sync-url')) $('sync-url').value = sync.url ?? '';
-      for (const id of ['sync-connect', 'sync-url', 'sync-token']) $(id).disabled = demo || !installed;
-      $('sync-now').disabled = demo || !installed || !sync.enabled;
-      $('sync-disconnect').disabled = demo || !installed || !sync.enabled;
-      $('sync-status').textContent = demo || !installed ? 'Доступно в установленном расширении.'
-        : sync.error ?? (sync.enabled ? `Последняя синхронизация: ${new Date(sync.date).toLocaleString('ru-RU')}. На сервере: ${sync.total} тестов.` : 'Синхронизация выключена.');
       render();
-    } catch (error) { toast(error.message); }
+    } catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
   }
   function filteredSessions() {
     const cutoff = $('period').value === 'all' ? 0 : Date.now() - Number($('period').value) * 86400000;
@@ -391,7 +384,7 @@
       if(installed&&!demo){await message({type:'START_PRACTICE',plan:exercise});selectedSessionId=null;activeExerciseId=exercise.id;renderResults();}
       else {window.open(KeyloomPractice.url(exercise.words,exercise.language),'_blank','noopener,noreferrer');toast('Предпросмотр: результат не привязывается. Запускай упражнение из установленного расширения.');}
     }
-    catch (error) { toast(error.message); }
+    catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
     finally{$('launch').disabled=false;}
   });
   $('copy').addEventListener('click', async () => {
@@ -519,7 +512,7 @@
     try {
       const next = { enabled: $('capture-enabled').checked, layout: $('layout').value };
       await message({ type: 'SET_SETTINGS', settings: next }); state.settings = next; render(); toast('Настройки сохранены. Начни новый тест.');
-    } catch (error) { toast(error.message); }
+    } catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
   }
   $('capture-enabled').addEventListener('change', saveSettings); $('layout').addEventListener('change', saveSettings);
   $('export').addEventListener('click', () => {
@@ -535,34 +528,10 @@
       if (file.size > 8_000_000) throw new Error('Файл больше 8 МБ');
       const sessions = core.parseBackup(await file.text());
       await message({ type: 'IMPORT', sessions }); await load(); toast(`Импортировано сессий: ${sessions.length}`);
-    } catch (error) { toast(error.message); }
+    } catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
     finally { event.target.value = ''; }
   });
   document.querySelector('.file-button').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $('import').click(); } });
-  $('sync-form').addEventListener('submit', async event => {
-    event.preventDefault();
-    if (demo || !installed) return;
-    try {
-      const url = new URL($('sync-url').value);
-      if (url.protocol !== 'https:') throw new Error('Используй HTTPS-адрес');
-      const granted = await extensionApi.permissions.request({
-        origins: ['https://' + url.hostname + '/*'],
-        ...(extensionApi.runtime.getManifest().browser_specific_settings?.gecko
-          ? { data_collection: ['websiteActivity', 'authenticationInfo'] } : {})
-      });
-      if (!granted) throw new Error('Доступ к серверу не предоставлен');
-      await message({ type: 'CONNECT_SYNC', config: { url: url.href, token: $('sync-token').value.trim() } });
-      $('sync-token').value = '';
-      await load();
-      toast('История синхронизирована');
-    } catch (error) { toast(error.message); }
-  });
-  for (const [id, type] of [['sync-now', 'SYNC_NOW'], ['sync-disconnect', 'DISCONNECT_SYNC']]) {
-    $(id).addEventListener('click', async () => {
-      try { await message({ type }); await load(); }
-      catch (error) { toast(error.message); }
-    });
-  }
   if (installed) extensionApi.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.sessions || changes.settings || changes.syncStatus || changes.syncConfig)) void load(); });
   else window.addEventListener('storage', () => void load());
   window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
