@@ -9,10 +9,9 @@ export function firefoxManifest(chromium) {
     scripts: ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'sync.js', 'background.js']
   };
   manifest.browser_specific_settings = {
-    gecko_android: { strict_min_version: '142.0' },
     gecko: {
       id: 'keyloom@mishanykarl',
-      strict_min_version: '140.0',
+      strict_min_version: '142.0',
       // Exercise text goes to Monkeytype; optional sync also sends typing statistics.
       data_collection_permissions: {
         required: ['websiteContent'], optional: ['websiteActivity', 'authenticationInfo']

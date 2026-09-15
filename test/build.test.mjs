@@ -17,7 +17,8 @@ test('packages keep shared sources and load the Firefox event page in manifest o
     const manifest = await readManifest(firefox);
     assert.equal(original.background.service_worker, 'background.js');
     assert.equal(manifest.background.service_worker, undefined);
-    assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '140.0');
+    assert.equal(manifest.browser_specific_settings.gecko.strict_min_version, '142.0');
+    assert.equal(manifest.browser_specific_settings.gecko_android, undefined);
     assert.equal(firefoxManifest(original).background.scripts.at(-1), 'background.js');
     assert.equal(original.browser_specific_settings, undefined);
     assert.deepEqual(manifest.permissions, original.permissions);

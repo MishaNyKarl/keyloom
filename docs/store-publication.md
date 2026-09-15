@@ -71,7 +71,7 @@ Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/key
 
 Manifest уже содержит обязательный `websiteContent` для текста упражнения,
 добровольные `websiteActivity` и `authenticationInfo` для синхронизации. Запрос
-согласия вызывается при подключении сервера; desktop minimum — Firefox 140.
+согласия вызывается при подключении сервера; desktop minimum — Firefox 142.
 
 Официально: [загрузка дополнения](https://extensionworkshop.com/documentation/publish/submitting-an-add-on/),
 [исходный код](https://extensionworkshop.com/documentation/publish/source-code-submission/),
