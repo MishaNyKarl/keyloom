@@ -1,14 +1,48 @@
 /* Flat, content-first layout shared by all Keyloom themes. */
 body { max-width: 1240px; margin: 0 auto; padding: 28px 32px 0; }
 .sidebar { position: static; width: auto; padding: 0; border: 0; background: transparent; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 24px; }
-.sidebar nav { display: flex; flex: 1; flex-wrap: wrap; gap: 6px 16px; }
+.sidebar nav {
+  display: flex;
+  order: 3;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+}
 .sidebar-label, .local-card, .monkey-link, .nav-dot, .beta { display: none; }
 .brand { font-size: 25px; letter-spacing: -1px; color: var(--text); }
 .brand-mark { background: transparent; color: var(--accent); width: 26px; }
-.nav-item { width: auto; padding: 6px 0; margin: 0; gap: 7px; font-size: 12px; color: var(--muted); }
-.nav-item.selected { background: transparent; color: var(--accent); }
-.nav-item:hover { color: var(--text); }
-.sidebar-bottom { margin: 0; }
+.sidebar .nav-item {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  padding: 4px 8px;
+  margin: 0;
+  gap: 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 400;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sidebar .nav-item.selected { background: transparent; color: var(--accent); }
+.sidebar .nav-item:hover { color: var(--text); }
+.sidebar-bottom { margin: 0 0 0 auto; }
 .version { font-size: 10px; letter-spacing: 0; margin: 0; gap: 8px; }
 main { margin: 0; }
 .topbar { height: auto; min-height: 65px; padding: 15px 0; border: 0; gap: 12px; flex-wrap: wrap; }
