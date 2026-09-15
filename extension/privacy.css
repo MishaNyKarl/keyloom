@@ -1,8 +1,8 @@
 :root {
-  font-family: system-ui, sans-serif;
-  color-scheme: dark;
-  color: #eeefe8;
-  background: #151715;
+  font-family: var(--mono);
+
+  color: var(--text);
+  background: var(--bg);
 }
 main {
   max-width: 760px;
@@ -11,4 +11,4 @@ main {
   line-height: 1.65;
 }
 h2 { margin-top: 32px; }
-a { color: #d5e7a2; }
+a { color: var(--accent); }

@@ -114,12 +114,12 @@
     const points = sessions.map((s, i) => [sessions.length === 1 ? 323 : 46 + i / (sessions.length - 1) * 554, ordinate(s[metric])]);
     for (const tick of scale.ticks) {
       const y = ordinate(tick);
-      element('line', { x1: 44, x2: 605, y1: y, y2: y, stroke: '#343b2e', 'stroke-dasharray': '3 5' });
-      element('text', { x: 8, y: y + 4, fill: '#7f8b74', 'font-size': 10, 'font-family': 'Consolas,monospace' }, tick.toLocaleString('ru-RU', { maximumFractionDigits: 2 }));
+      element('line', { x1: 44, x2: 605, y1: y, y2: y, stroke: 'var(--border)', 'stroke-dasharray': '3 5' });
+      element('text', { x: 8, y: y + 4, fill: 'var(--muted)', 'font-size': 10, 'font-family': 'JetBrains Mono,monospace' }, tick.toLocaleString('ru-RU', { maximumFractionDigits: 2 }));
     }
     if (points.length > 1) {
-      element('path', { d: `M${points[0][0]},166 L${points.map(p => p.join(',')).join(' L')} L${points.at(-1)[0]},166 Z`, fill: '#d5e7a209' });
-      element('polyline', { points: points.map(p => p.join(',')).join(' '), fill: 'none', stroke: '#d5e7a2', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
+      element('path', { d: `M${points[0][0]},166 L${points.map(p => p.join(',')).join(' L')} L${points.at(-1)[0]},166 Z`, fill: 'var(--accent)', 'fill-opacity': .06 });
+      element('polyline', { points: points.map(p => p.join(',')).join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
     }
     const tooltip = document.createElement('div');
     tooltip.className = 'chart-tooltip';
@@ -146,7 +146,7 @@
       tooltip.style.top = Math.max(8, y + height + 22 > innerHeight ? y - height - 14 : y + 14) + 'px';
     }
     points.forEach(([x, y], i) => {
-      element('circle', { cx: x, cy: y, r: i === points.length - 1 ? 4 : 2.5, fill: '#d5e7a2', stroke: '#1c1f1c', 'stroke-width': 1.5 });
+      element('circle', { cx: x, cy: y, r: i === points.length - 1 ? 4 : 2.5, fill: 'var(--accent)', stroke: 'var(--panel)', 'stroke-width': 1.5 });
       const hit = element('circle', { cx: x, cy: y, r: 10, fill: 'transparent', tabindex: 0,
         class: 'chart-node', 'aria-describedby': tooltip.id,
         'aria-label': `${new Date(sessions[i].date).toLocaleString('ru-RU')}: ${format(sessions[i].wpm, 1)} WPM, ${format(sessions[i].accuracy, 1)}%` });
@@ -158,7 +158,7 @@
       hit.addEventListener('click', event => show(sessions[i], hit, event));
       hit.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
       if (i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2)) {
-        element('text', { x, y: 193, 'text-anchor': i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle', fill: '#7f8b74', 'font-size': 10, 'font-family': 'Consolas,monospace' }, new Date(sessions[i].date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
+        element('text', { x, y: 193, 'text-anchor': i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle', fill: 'var(--muted)', 'font-size': 10, 'font-family': 'JetBrains Mono,monospace' }, new Date(sessions[i].date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
       }
     });
     container.replaceChildren(svg, tooltip);

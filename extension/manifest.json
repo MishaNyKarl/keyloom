@@ -11,12 +11,19 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_icon": { "48": "icons/keyloom-48.png", "96": "icons/keyloom-96.png" },
+    "default_icon": {
+      "48": "icons/keyloom-48.png",
+      "96": "icons/keyloom-96.png"
+    },
     "default_popup": "popup.html",
     "default_title": "Keyloom"
   },
   "options_page": "dashboard.html",
-  "icons": { "48": "icons/keyloom-48.png", "96": "icons/keyloom-96.png", "128": "icons/keyloom-128.png" },
+  "icons": {
+    "48": "icons/keyloom-48.png",
+    "96": "icons/keyloom-96.png",
+    "128": "icons/keyloom-128.png"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -27,7 +34,10 @@
         "configuration.js",
         "content.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "css": [
+        "themes.css"
+      ]
     }
   ],
   "content_security_policy": {
@@ -35,5 +45,15 @@
   },
   "optional_host_permissions": [
     "https://*/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "fonts/*.woff2"
+      ],
+      "matches": [
+        "https://monkeytype.com/*"
+      ]
+    }
   ]
 }

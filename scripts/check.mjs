@@ -22,6 +22,15 @@ for (const file of [...manifest.content_scripts.flatMap(s => s.js), ...backgroun
   await access(path.join(root, file));
 }
 for (const icon of Object.values(manifest.icons ?? {})) await access(path.join(root, icon));
+for (const file of manifest.content_scripts.flatMap(script => script.css ?? [])) {
+  await access(path.join(root, file));
+}
+const themes = await readFile(path.join(root, 'themes.css'), 'utf8');
+for (const match of themes.matchAll(/url\('([^']+)'\)/g)) {
+  if (!match[1].startsWith('fonts/')) throw new Error('Fonts must be bundled locally');
+  await access(path.join(root, match[1]));
+}
+await access(path.join(root, 'fonts/OFL.txt'));
 for (const page of ['dashboard.html', 'popup.html', 'privacy.html']) {
   const html = await readFile(path.join(root, page), 'utf8');
   for (const match of html.matchAll(/(?:src|href)="([^"#]+\.(?:js|css))"/g)) await access(path.join(root, match[1]));

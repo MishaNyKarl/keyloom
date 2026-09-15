@@ -7,7 +7,7 @@
   let settings = { enabled: false, layout: 'default' }, session = null, firstNode = null;
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
-  let dailyState = null, nextButton, comparisonNote, advancing = false;
+  let dailyState = null, nextButton, comparisonNote, panel, theme = 'dark', advancing = false;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -23,17 +23,17 @@
       badge.id = 'keyloom-status';
       badge.type = 'button';
       badge.title = 'Открыть статистику Keyloom';
-      badge.style.cssText = 'border:0;background:transparent;color:#dbe7b7;font:12px/1.4 system-ui;padding:8px 12px;cursor:pointer';
+      badge.style.cssText = 'border:0;background:transparent;color:var(--text);font:12px/1.4 var(--mono);padding:8px 12px;cursor:pointer';
       badge.addEventListener('click', () => void pendingSave.then(()=>send({ type: 'OPEN_DASHBOARD', sessionId:lastSavedId })).catch(() => {}));
-      const panel = document.createElement('div');
+      panel = document.createElement('div');
       panel.id = 'keyloom-panel';
-      panel.style.cssText = 'position:fixed;bottom:14px;right:18px;max-width:calc(100vw - 36px);z-index:1000;display:flex;flex-wrap:wrap;border:1px solid #5b6155;border-radius:8px;background:#20251f;padding:4px;gap:4px';
+      panel.style.cssText = 'position:fixed;bottom:14px;right:18px;max-width:calc(100vw - 36px);z-index:1000;display:flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:4px;gap:4px';
       const open = document.createElement('button');
       open.id = 'keyloom-open-app';
       open.type = 'button';
       const daily = location.search?.includes('keyloomDaily=');
       open.textContent = daily ? 'К ежедневному плану →' : 'Открыть Keyloom →';
-      open.style.cssText = 'border:1px solid #69784e;border-radius:5px;background:#d5e7a2;color:#20251f;font:12px/1.4 system-ui;padding:8px 12px;cursor:pointer';
+      open.style.cssText = 'border:1px solid var(--border);border-radius:5px;background:var(--accent);color:var(--on-accent);font:12px/1.4 var(--mono);padding:8px 12px;cursor:pointer';
       open.addEventListener('click', () => {
         void send({ type: 'OPEN_DASHBOARD', ...(daily ? {view:'daily'} : {}) }).catch(() => {});
       });
@@ -56,10 +56,11 @@
       });
       comparisonNote = document.createElement('span');
       comparisonNote.id = 'keyloom-daily-comparison';
-      comparisonNote.style.cssText = 'flex-basis:100%;max-width:480px;color:#dbe7b7;font:12px/1.5 system-ui;padding:4px 8px';
+      comparisonNote.style.cssText = 'flex-basis:100%;max-width:480px;color:var(--text);font:12px/1.5 var(--mono);padding:4px 8px';
       panel.append(badge, open, nextButton, comparisonNote);
       document.body.append(panel);
     }
+    panel.setAttribute('data-keyloom-theme', ['dark','light','repose-dark'].includes(theme) ? theme : 'dark');
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;
     nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
@@ -192,6 +193,7 @@
   }
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount, { once: true });
   void send({ type: 'GET_STATE' }).then(state => {
+    theme = state.theme ?? 'dark';
     settings = state.settings;
     trainingPlan = state.training ?? null;
     dailyState = state.daily ?? null;
@@ -199,7 +201,9 @@
     paint();
   }).catch(() => {});
   extensionApi.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes.settings) return;
+    if (area !== 'local') return;
+    if (changes.theme) { theme = changes.theme.newValue; paint(); }
+    if (!changes.settings) return;
     settings = changes.settings.newValue;
     session = null; status = settings.enabled ? 'Начните новый тест' : 'На паузе'; paint();
   });

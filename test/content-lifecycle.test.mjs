@@ -9,6 +9,7 @@ async function harness(training=null, firefox=false, daily=null) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
+  let storageListener;
   let observer, first, clock = 0, wordIndex=0, target='street';
   const messages=[];
   const element = () => ({ shown:true, style:{},textContent:'',
@@ -38,7 +39,7 @@ async function harness(training=null, firefox=false, daily=null) {
       if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training};
       if(message.type==='SAVE_SESSION'){saves.push(message.session);return {ok:true,saved:true,daily};}
       return {ok:true};
-    }},storage:{onChanged:{addListener(){}}}},
+    }},storage:{onChanged:{addListener(callback){storageListener=callback;}}}},
   });
   if (firefox) { context.browser = context.chrome; delete context.chrome; }
   vm.runInContext(core,context); vm.runInContext(source,context);
@@ -48,6 +49,7 @@ async function harness(training=null, firefox=false, daily=null) {
   const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
   return {typing,result,badge,input,saves,type,changed,context,messages,mode,created,
+    changeTheme(theme){storageListener({theme:{newValue:theme}},'local');},
     nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
     async clickBadge(){badge.click();await settle();},
     replaceWord(){first=newWord();input.value=' ';},
@@ -182,4 +184,17 @@ test('completed comparison is visible on Monkeytype with both times and accuracy
   assert.equal(note.hidden,false);
   assert.match(note.textContent,/30.0 с → после 25.0 с/);
   assert.match(note.textContent,/99.0% → 98.0%/);
+});
+
+test('theme changes during typing preserve the complete captured session', async () => {
+  const h=await harness();
+  h.type('str');
+  h.changeTheme('repose-dark');
+  h.type('eet');
+  h.typing.shown=false;
+  h.result.shown=true;
+  await h.changed();
+  assert.equal(h.saves.length,1);
+  assert.equal(h.saves[0].status,'completed');
+  assert.equal(h.saves[0].presses,6);
 });
