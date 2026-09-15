@@ -1,9 +1,10 @@
 (() => {
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
   const $ = id => document.getElementById(id);
   const core = KeyloomCore;
   const demo = new URLSearchParams(location.search).get('demo') === '1';
   const fixture = new URLSearchParams(location.search).get('fixture') === '1';
-  const installed = !!globalThis.chrome?.runtime?.id;
+  const installed = !!extensionApi?.runtime?.id;
   const previewKey = fixture ? 'keyloom-fixture-v1' : 'keyloom-local-preview-v1';
   let state = { sessions: [], settings: { enabled: true, layout: 'default' } };
   let currentProfile, exercise, group = 'pairs', selectedFocus, toastTimer;
@@ -14,7 +15,7 @@
   function toast(message) { clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false; toastTimer = setTimeout(() => $('toast').hidden = true, 4500); }
   async function message(payload) {
     if (installed) {
-      const reply = await chrome.runtime.sendMessage(payload);
+      const reply = await extensionApi.runtime.sendMessage(payload);
       if (!reply?.ok) throw new Error(reply?.error ?? 'Не удалось связаться с расширением');
       return reply;
     }
@@ -531,7 +532,7 @@
     finally { event.target.value = ''; }
   });
   document.querySelector('.file-button').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $('import').click(); } });
-  if (installed) chrome.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.sessions || changes.settings)) void load(); });
+  if (installed) extensionApi.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.sessions || changes.settings)) void load(); });
   else window.addEventListener('storage', () => void load());
   window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
   showView(location.hash.slice(1)); void load();

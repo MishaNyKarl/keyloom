@@ -1,5 +1,6 @@
 /* Monkeytype DOM adapter. Isolated world; no account access and no page patches. */
 (() => {
+  const extensionApi = globalThis.browser ?? globalThis.chrome;
   if (globalThis.__keyloomLoaded) return;
   globalThis.__keyloomLoaded = true;
   const core = globalThis.KeyloomCore;
@@ -8,7 +9,7 @@
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
   const send = async message => {
     try {
-      const reply = await chrome.runtime.sendMessage(message);
+      const reply = await extensionApi.runtime.sendMessage(message);
       if (!reply?.ok) throw new Error(reply?.error ?? 'Нет связи с расширением');
       return reply;
     } catch (error) { status = 'Не сохранено · обновите вкладку'; paint(); throw error; }
@@ -137,7 +138,7 @@
   }
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount, { once: true });
   void send({ type: 'GET_STATE' }).then(state => { settings = state.settings; trainingPlan=state.training??null; paint(); }).catch(() => {});
-  chrome.storage.onChanged.addListener((changes, area) => {
+  extensionApi.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.settings) return;
     settings = changes.settings.newValue;
     session = null; status = settings.enabled ? 'Начните новый тест' : 'На паузе'; paint();

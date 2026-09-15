@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
 // Executes the actual content script; only DOM and Chrome transport are simulated.
-async function harness(training=null) {
+async function harness(training=null, firefox=false) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
@@ -39,6 +39,7 @@ async function harness(training=null) {
       return {ok:true};
     }},storage:{onChanged:{addListener(){}}}},
   });
+  if (firefox) { context.browser = context.chrome; delete context.chrome; }
   vm.runInContext(core,context); vm.runInContext(source,context);
   // Cross-realm async transport needs a full microtask drain before typing.
   const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -120,4 +121,15 @@ test('quote capture accepts capitalized words, digits and punctuation through no
   assert.equal(h.saves[0].digits['2'].attempts, 2);
   assert.equal(h.saves[0].punctuation[','].attempts, 1);
   assert.equal(h.saves[0].punctuation['!'].attempts, 1);
+});
+
+test('Firefox browser namespace supports capture and result navigation without chrome', async () => {
+  const h = await harness(null, true);
+  h.type('street');
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.equal(h.saves[0].status, 'completed');
+  await h.clickBadge();
+  assert.equal(h.messages.at(-1).sessionId, h.saves[0].id);
 });

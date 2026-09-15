@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
-async function harness() {
+async function harness(firefox = false) {
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
   const storage = { sessions: [], settings: { enabled: true, layout: 'default' } };
@@ -18,6 +18,15 @@ async function harness() {
     storage: { local: { get: async () => structuredClone(storage), set: async values => Object.assign(storage, structuredClone(values)) } },
     tabs: { create: async options => {opened.push(options.url);return { id: 1 };} },
   };
+  if (firefox) {
+    context.browser = context.chrome;
+    context.browser.runtime.getURL = path => 'moz-extension://test-extension/' + path;
+    delete context.chrome;
+    delete context.importScripts;
+    for (const name of ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js']) {
+      vm.runInContext(scripts[name], context);
+    }
+  }
   vm.runInContext(source, context);
   const send = (message, url = 'https://monkeytype.com/') => new Promise(resolve => {
     const keep = handler(message, { id: 'test-extension', url }, resolve);
@@ -107,4 +116,19 @@ test('symbol exercises round-trip exact punctuation and save category-specific r
   assert.equal((await h.send({ type: 'SAVE_SESSION', session }, url.toString())).ok, true);
   assert.equal(h.storage.sessions[0].training.kind, 'punctuation');
   assert.equal(h.storage.sessions[0].punctuation[','].attempts, 1);
+});
+
+test('Firefox event page saves results, opens its own dashboard and registers practice', async () => {
+  const h = await harness(true);
+  const page = 'moz-extension://test-extension/dashboard.html';
+  assert.equal((await h.send({ type: 'GET_STATE' }, page)).ok, true);
+  const responses = await Promise.all(['firefox-one', 'firefox-two'].map(id => h.send({ type: 'SAVE_SESSION', session: h.session(id) })));
+  assert.ok(responses.every(result => result.saved));
+  assert.equal(h.storage.sessions.length, 2);
+  await h.send({ type: 'OPEN_DASHBOARD', sessionId: 'firefox-one' });
+  assert.match(h.opened.at(-1), /^moz-extension:\/\/test-extension\/dashboard.html\?session=firefox-one/);
+  const plan = { id: 'firefox-plan', language: 'english', layout: 'default', kind: 'pairs', seconds: 60, words: Array(10).fill('cat'), targets: ['ca'] };
+  assert.equal((await h.send({ type: 'START_PRACTICE', plan }, page)).ok, true);
+  assert.equal(new URL(h.opened.at(-1)).searchParams.get('keyloomExercise'), plan.id);
+  assert.equal(await h.send({ type: 'GET_STATE' }, 'https://unrelated.example/'), undefined);
 });

@@ -32,5 +32,10 @@ jobs:
         run: node --test
       - name: Check extension syntax, assets and CSP
         run: node scripts/check.mjs
+      - name: Build and check both browser packages
+        run: |
+          node scripts/build.mjs
+          node scripts/check.mjs artifacts/chrome
+          node scripts/check.mjs artifacts/firefox
       - name: Check whitespace
         run: git diff --check

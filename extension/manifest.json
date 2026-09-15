@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Keyloom — персональные тренировки печати",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Находит сложные слова и сочетания в Monkeytype и подбирает упражнения. Данные остаются в браузере.",
   "permissions": ["storage"],
   "background": { "service_worker": "background.js" },

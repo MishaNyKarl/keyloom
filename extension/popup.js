@@ -1,8 +1,9 @@
+const extensionApi = globalThis.browser ?? globalThis.chrome;
 const status = document.getElementById('status');
 const toggle = document.getElementById('enabled');
 let settings;
 async function send(message) {
-  const reply = await chrome.runtime.sendMessage(message);
+  const reply = await extensionApi.runtime.sendMessage(message);
   if (!reply?.ok) throw new Error(reply?.error ?? 'Не удалось загрузить данные');
   return reply;
 }
