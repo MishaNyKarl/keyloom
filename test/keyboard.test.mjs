@@ -37,7 +37,7 @@ function harness(options = {}) {
   vm.runInContext(source,context);
   const menu=context.KeyloomKeyboard.create(options);
   const event=(changes={})=>({isTrusted:true,code:'',key:'',target:doc.activeElement,
-    preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...changes});
+    preventDefault(){this.prevented=true;},stopPropagation(){this.propagationStopped=true;},stopImmediatePropagation(){this.stopped=true;},...changes});
   const key=async changes=>{const e=event(changes);for(const fn of handlers.keydown??[])fn(e);await settle();return e;};
   return {doc,nodes,menu,key,event,origin,handlers,classes,timers};
 }
@@ -104,4 +104,33 @@ test('dashboard cursor hides after inactivity and movement restores it',()=>{
   assert.equal(h.classes.has('keyloom-pointer-idle'),false);
   h.handlers.visibilitychange[0]();
   assert.equal(h.timers.size,0);
+});
+
+test('palette text input stays editable without leaking events to host shortcuts', async () => {
+  const h = harness({commands:[{label:'Ежедневный план', run:() => {}}]});
+  h.menu.open();
+  const dialog = h.nodes.find(node => node.tag === 'dialog');
+  const input = h.nodes.find(node => node.tag === 'input');
+  for (const change of [{key:'д'}, {key:'Backspace'}, {key:'v',ctrlKey:true},
+    {key:'Process',isComposing:true}]) {
+    const event = h.event(change);
+    dialog.listeners.keydown(event);
+    // Simulate the host's global handler consuming keys or moving focus.
+    if (!event.propagationStopped && !event.stopped) {
+      event.preventDefault();
+      h.origin.focus();
+    }
+    assert.equal(event.prevented, undefined);
+    assert.equal(h.doc.activeElement, input);
+  }
+  input.value = 'ежедневный';
+  input.listeners.input();
+  const list = h.nodes.find(node => node.className === 'keyloom-command-list');
+  assert.equal(list.children.length, 1);
+  for (const type of ['keypress', 'keyup', 'beforeinput', 'input', 'click']) {
+    const event = h.event();
+    dialog.listeners[type](event);
+    assert.equal(event.propagationStopped, true);
+    assert.equal(event.prevented, undefined);
+  }
 });

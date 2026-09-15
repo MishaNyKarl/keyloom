@@ -68,7 +68,13 @@
         document.body.append(dialog);
         input.addEventListener('input', render);
         dialog.addEventListener('close', () => previousFocus?.focus());
+        // Keep editable input and native button behavior, but do not let the
+        // host's global typing handlers consume menu events or steal focus.
+        for (const type of ['keypress', 'keyup', 'beforeinput', 'input', 'click']) {
+          dialog.addEventListener(type, event => event.stopPropagation());
+        }
         dialog.addEventListener('keydown', event => {
+          event.stopPropagation();
           if (event.isComposing) return;
           const buttons = Array.from(list.querySelectorAll('button'));
           const index = buttons.indexOf(document.activeElement);
