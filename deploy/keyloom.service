@@ -1,0 +1,21 @@
+[Unit]
+Description=Keyloom private sync API
+After=network.target
+
+[Service]
+User=keyloom
+Group=keyloom
+EnvironmentFile=/etc/keyloom.env
+ExecStart=/opt/keyloom-runtime/bin/node /opt/keyloom/current/server/start.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/keyloom
+UMask=0077
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

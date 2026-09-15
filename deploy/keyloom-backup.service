@@ -1,0 +1,10 @@
+[Unit]
+Description=Keyloom daily SQLite backup
+
+[Service]
+Type=oneshot
+User=keyloom
+Group=keyloom
+EnvironmentFile=/etc/keyloom.env
+ExecStart=/opt/keyloom-runtime/bin/node /opt/keyloom/current/server/backup.mjs
+UMask=0077

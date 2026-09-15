@@ -9,11 +9,12 @@ async function harness(firefox = false) {
   const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
   const storage = { sessions: [], settings: { enabled: true, layout: 'default' } };
   let handler;
-  const context = vm.createContext({ crypto: webcrypto, TextEncoder, console, URL });
-  const scripts = Object.fromEntries(await Promise.all(['core.js','analytics.js','vendor/lz-string.js','practice.js'].map(async name=>[name,await readFile(new URL('../extension/'+name,import.meta.url),'utf8')])));
+  const context = vm.createContext({ crypto: webcrypto, TextEncoder, TextDecoder, AbortSignal, console, URL });
+  const scripts = Object.fromEntries(await Promise.all(['core.js','analytics.js','vendor/lz-string.js','practice.js','sync.js'].map(async name=>[name,await readFile(new URL('../extension/'+name,import.meta.url),'utf8')])));
   context.importScripts = (...names) => names.forEach(name=>vm.runInContext(scripts[name], context));
   const opened=[];
   context.chrome = {
+    permissions: { contains: async () => true },
     runtime: { id: 'test-extension', getURL: path => `chrome-extension://test-extension/${path}`, onMessage: { addListener: fn => handler = fn } },
     storage: { local: { get: async () => structuredClone(storage), set: async values => Object.assign(storage, structuredClone(values)) } },
     tabs: { create: async options => {opened.push(options.url);return { id: 1 };} },
@@ -23,7 +24,7 @@ async function harness(firefox = false) {
     context.browser.runtime.getURL = path => 'moz-extension://test-extension/' + path;
     delete context.chrome;
     delete context.importScripts;
-    for (const name of ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js']) {
+    for (const name of ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js','sync.js']) {
       vm.runInContext(scripts[name], context);
     }
   }
@@ -43,6 +44,28 @@ test('concurrent tabs cannot overwrite each other or duplicate results', async (
   const {storage,send,session} = await harness();
   const responses = await Promise.all([send({type:'SAVE_SESSION',session:session('a')}),send({type:'SAVE_SESSION',session:session('b')}),send({type:'SAVE_SESSION',session:session('a')})]);
   assert.ok(responses.every(r=>r.ok)); assert.equal(storage.sessions.length,2);
+});
+
+test('sync consent is extension-only, secrets stay private, failed sync preserves local results', async () => {
+  const h = await harness(true);
+  const page = 'moz-extension://test-extension/dashboard.html';
+  const config = { url: 'https://192.0.2.1:8443', token: 'synthetic-token-with-at-least-32-characters' };
+  h.context.fetch = async () => Response.json({ version: 1, total: 1, sessions: [h.session('remote')] });
+  assert.equal((await h.send({ type: 'CONNECT_SYNC', config })).ok, false);
+  assert.equal((await h.send({ type: 'CONNECT_SYNC', config }, page)).ok, true);
+  assert.equal(h.storage.sessions[0].id, 'remote');
+  for (const url of [page, 'https://monkeytype.com/']) {
+    assert.equal(JSON.stringify(await h.send({ type: 'GET_STATE' }, url)).includes(config.token), false);
+  }
+  assert.equal((await h.send({ type: 'DISCONNECT_SYNC' })).ok, false);
+  h.context.fetch = async () => { throw new Error('offline'); };
+  await h.send({ type: 'SAVE_SESSION', session: h.session('offline') });
+  await h.send({ type: 'SYNC_NOW' }, page);
+  assert.equal(h.storage.sessions.length, 2);
+  assert.ok(h.storage.syncStatus.error);
+  await h.send({ type: 'DISCONNECT_SYNC' }, page);
+  assert.equal(h.storage.syncConfig, null);
+  assert.equal(h.storage.sessions.length, 2);
 });
 test('disabled recording does not save; website cannot import or change settings', async () => {
   const {storage,send,session} = await harness();

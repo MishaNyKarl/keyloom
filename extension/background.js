@@ -1,10 +1,38 @@
 if (typeof importScripts === 'function') {
-  importScripts('core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js');
+  importScripts('core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'sync.js');
 }
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 const defaults = { enabled: true, layout: 'default' };
 // Serialize read-modify-write operations from multiple Monkeytype tabs.
 let queue = Promise.resolve();
+function syncPermissions(config) {
+  return { origins: ['https://' + new URL(config.url).hostname + '/*'],
+    ...(extensionApi.runtime.getManifest?.().browser_specific_settings?.gecko
+      ? { data_collection: ['websiteActivity', 'authenticationInfo'] } : {}) };
+}
+async function synchronize() {
+  const { syncConfig, sessions = [] } = await extensionApi.storage.local.get(['syncConfig', 'sessions']);
+  if (!syncConfig?.enabled) return;
+  try {
+    if (!await extensionApi.permissions.contains(syncPermissions(syncConfig))) {
+      throw new Error('Sync permission revoked');
+    }
+    const result = await KeyloomSync.exchange(syncConfig, sessions);
+    await extensionApi.storage.local.set({ sessions: result.sessions,
+      syncStatus: { date: Date.now(), total: result.total, error: null } });
+  } catch {
+    const { syncStatus = {} } = await extensionApi.storage.local.get('syncStatus');
+    await extensionApi.storage.local.set({ syncStatus: { ...syncStatus,
+      error: 'Не удалось синхронизировать. Проверьте соединение и ключ; повторим автоматически.' } });
+  }
+}
+function scheduleSync() {
+  return extensionApi.alarms?.create('keyloom-sync-soon', { delayInMinutes: 0.5 });
+}
+extensionApi.alarms?.create('keyloom-sync', { periodInMinutes: 5 });
+extensionApi.alarms?.onAlarm.addListener(alarm => {
+  if (alarm.name.startsWith('keyloom-sync')) queue = queue.catch(() => {}).then(synchronize);
+});
 extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
   const fromExtension = sender.id === extensionApi.runtime.id && sender.url?.startsWith(extensionApi.runtime.getURL(''));
   const fromMonkeytype = sender.id === extensionApi.runtime.id && sender.url?.startsWith('https://monkeytype.com/');
@@ -13,7 +41,10 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     const { sessions = [], settings = defaults, exercises = [] } = await extensionApi.storage.local.get(['sessions', 'settings','exercises']);
     if (message.type === 'GET_STATE') {
       const id=fromMonkeytype?new URL(sender.url).searchParams.get('keyloomExercise'):null;
-      return { sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises}:{training:exercises.find(p=>p.id===id)??null}) };
+      const { syncConfig, syncStatus } = fromExtension
+        ? await extensionApi.storage.local.get(['syncConfig', 'syncStatus']) : {};
+      const sync = { enabled: Boolean(syncConfig?.enabled), url: syncConfig?.url ?? '', ...syncStatus };
+      return { sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync}:{training:exercises.find(p=>p.id===id)??null}) };
     }
     if (message.type === 'SAVE_SESSION' && fromMonkeytype) {
       if (!settings.enabled) return { ignored: true };
@@ -26,6 +57,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
       await extensionApi.storage.local.set({ sessions: next });
+      await scheduleSync();
       return { saved: true };
     }
     if (message.type === 'OPEN_DASHBOARD') {
@@ -35,6 +67,24 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       return { opened: true };
     }
     if (!fromExtension) throw new Error('Недоступная операция');
+    if (message.type === 'CONNECT_SYNC') {
+      const config = KeyloomSync.configuration(message.config);
+      if (!await extensionApi.permissions.contains(syncPermissions(config))) {
+        throw new Error('Разрешите расширению подключение к серверу');
+      }
+      const result = await KeyloomSync.exchange(config, sessions);
+      await extensionApi.storage.local.set({ syncConfig: config, sessions: result.sessions,
+        syncStatus: { date: Date.now(), total: result.total, error: null } });
+      return { connected: true };
+    }
+    if (message.type === 'DISCONNECT_SYNC') {
+      await extensionApi.storage.local.set({ syncConfig: null, syncStatus: null });
+      return { disconnected: true };
+    }
+    if (message.type === 'SYNC_NOW') {
+      await synchronize();
+      return { synchronized: true };
+    }
     if(message.type==='START_PRACTICE'){
       if(!settings.enabled)throw new Error('Включите запись тестов перед тренировкой');
       const plan=message.plan;
@@ -52,6 +102,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === 'IMPORT') {
       const next = KeyloomCore.mergeSessions(sessions, message.sessions);
       await extensionApi.storage.local.set({ sessions: next });
+      await scheduleSync();
       return { count: next.length };
     }
     throw new Error('Неизвестная операция');

@@ -39,3 +39,31 @@ jobs:
           node scripts/check.mjs artifacts/firefox
       - name: Check whitespace
         run: git diff --check
+
+  deploy:
+    name: Deploy private API
+    needs: checks
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: keyloom-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure deployment identity
+        env:
+          DEPLOY_KEY: ${{ secrets.KEYLOOM_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KEYLOOM_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Upload and activate checked revision
+        env:
+          DEPLOY_HOST: ${{ secrets.KEYLOOM_DEPLOY_HOST }}
+        run: |
+          tar -czf release.tar.gz server extension/core.js
+          scp -o BatchMode=yes release.tar.gz scripts/deploy.sh "keyloom-deploy@$DEPLOY_HOST:"
+          ssh -o BatchMode=yes "keyloom-deploy@$DEPLOY_HOST" "bash deploy.sh $GITHUB_SHA"

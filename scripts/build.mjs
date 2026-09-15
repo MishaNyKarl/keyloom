@@ -6,14 +6,16 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 export function firefoxManifest(chromium) {
   const manifest = structuredClone(chromium);
   manifest.background = {
-    scripts: ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'background.js']
+    scripts: ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'sync.js', 'background.js']
   };
   manifest.browser_specific_settings = {
     gecko: {
       id: 'keyloom@mishanykarl',
       strict_min_version: '140.0',
-      // Only exercise text goes to Monkeytype, on an explicit user action.
-      data_collection_permissions: { required: ['websiteContent'] }
+      // Exercise text goes to Monkeytype; optional sync also sends typing statistics.
+      data_collection_permissions: {
+        required: ['websiteContent'], optional: ['websiteActivity', 'authenticationInfo']
+      }
     }
   };
   return manifest;
