@@ -131,34 +131,53 @@ html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important
   transform: translateX(-50%);
   z-index: 1000;
   width: max-content;
-  max-width: min(600px, calc(100vw - 32px));
+  max-width: calc(100vw - 4rem);
   color: var(--sub-color, var(--muted));
-  font: 1rem/1.25 var(--mono);
+  --keyloom-bar-padding-x: .4em;
+  --keyloom-bar-padding-y: .5rem;
+  font: .5em/1.25 var(--mono);
+}
+@media (min-width: 768px) {
+  #keyloom-widget {
+    --keyloom-bar-padding-x: .45em;
+    --keyloom-bar-padding-y: .75rem;
+    font-size: .6em;
+  }
+}
+@media (min-width: 1024px) {
+  #keyloom-widget {
+    --keyloom-bar-padding-x: .5em;
+    font-size: .75em;
+  }
+}
+@media (min-width: 1280px) {
+  #keyloom-widget { --keyloom-bar-padding-x: 1em; }
 }
 #keyloom-panel {
   box-sizing: border-box;
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 10px 16px;
+  gap: 0;
+  padding: 0 var(--keyloom-bar-padding-x);
   border: 0;
   outline: none;
   box-shadow: 0 0 0 .2em #0000;
-  border-radius: 10px;
+  border-radius: var(--roundness, .5rem);
   background: var(--sub-alt-color, var(--panel));
   color: var(--sub-color, var(--muted));
 }
 #keyloom-panel button {
   border: 0;
   border-radius: 4px;
-  padding: 4px 0;
+  padding: var(--keyloom-bar-padding-y) var(--keyloom-bar-padding-x);
+  white-space: nowrap;
   background: transparent;
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
-#keyloom-panel button:hover,
+#keyloom-panel button:hover { color: var(--text-color, var(--text)); }
 #keyloom-panel button:focus-visible,
 #keyloom-panel #keyloom-next-step {
   color: var(--main-color, var(--accent));
@@ -194,13 +213,13 @@ body:has(#keyloom-widget) .full-width:has(> #ad-result-wrapper) {
 #keyloom-panel button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: .5em;
 }
 #keyloom-panel button::before {
   content: '';
-  width: 16px;
-  height: 16px;
-  flex: 0 0 16px;
+  width: 1.25em;
+  height: 1em;
+  flex: 0 0 1.25em;
   background: currentColor;
   mask: var(--keyloom-icon) center / contain no-repeat;
 }
