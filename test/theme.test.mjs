@@ -65,7 +65,7 @@ test('preview themes stay separate and storage errors remain visible', async () 
 test('fonts are local WOFF2 assets and content resources are limited to Monkeytype', async () => {
   const manifest = JSON.parse(await readFile(new URL('../extension/manifest.json', import.meta.url)));
   assert.deepEqual(manifest.web_accessible_resources,
-    [{resources:['fonts/*.woff2'],matches:['https://monkeytype.com/*']}]);
+    [{resources:['fonts/*.woff2','icons/lucide/*.svg'],matches:['https://monkeytype.com/*']}]);
   for (const name of ['Regular','Bold']) {
     const font = await readFile(new URL('../extension/fonts/JetBrainsMono-' + name + '.woff2', import.meta.url));
     assert.equal(font.toString('ascii',0,4),'wOF2');

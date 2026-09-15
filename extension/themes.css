@@ -106,3 +106,10 @@
   --heat-3: #e77979;
   --heat-text: #252522;
 }
+
+/* One local typeface for pages, form controls, SVG labels and injected UI. */
+[data-keyloom-theme],
+[data-keyloom-theme] * {
+  font-family: 'JetBrains Mono', monospace;
+  font-synthesis: none;
+}

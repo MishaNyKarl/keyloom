@@ -34,21 +34,11 @@
 }
 .keyloom-command-search::before {
   content: '';
-  width: 13px;
-  height: 13px;
-  flex: 0 0 13px;
-  border: 3px solid currentColor;
-  border-radius: 50%;
-}
-.keyloom-command-search::after {
-  content: '';
-  position: absolute;
-  left: 36px;
-  top: calc(50% + 6px);
-  width: 9px;
-  height: 3px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   background: currentColor;
-  transform: rotate(45deg);
+  mask: url('icons/lucide/search.svg') center / contain no-repeat;
 }
 #keyloom-command-menu input {
   box-sizing: border-box;
@@ -95,10 +85,12 @@
   text-align: left;
 }
 .keyloom-command-list button::before {
-  content: '›';
+  content: '';
+  width: 16px;
+  height: 16px;
   flex: 0 0 16px;
-  text-align: center;
-  font-weight: bold;
+  background: currentColor;
+  mask: url('icons/lucide/command.svg') center / contain no-repeat;
 }
 #keyloom-command-menu button:hover,
 #keyloom-command-menu button:focus-visible,
@@ -193,3 +185,21 @@ body:has(#keyloom-widget) #ad-result-small-wrapper,
 body:has(#keyloom-widget) .full-width:has(> #ad-result-wrapper) {
   display: none !important;
 }
+
+#keyloom-panel button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+#keyloom-panel button::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  background: currentColor;
+  mask: var(--keyloom-icon) center / contain no-repeat;
+}
+#keyloom-status { --keyloom-icon: url('icons/lucide/keyboard.svg'); }
+#keyloom-open-app { --keyloom-icon: url('icons/lucide/panels-top-left.svg'); }
+#keyloom-next-step { --keyloom-icon: url('icons/lucide/skip-forward.svg'); }
+#keyloom-open-commands { --keyloom-icon: url('icons/lucide/command.svg'); }

@@ -51,7 +51,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "fonts/*.woff2"
+        "fonts/*.woff2",
+        "icons/lucide/*.svg"
       ],
       "matches": [
         "https://monkeytype.com/*"

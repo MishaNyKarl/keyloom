@@ -30,7 +30,7 @@
       open.id = 'keyloom-open-app';
       open.type = 'button';
       const daily = location.search?.includes('keyloomDaily=');
-      open.textContent = daily ? 'К ежедневному плану →' : 'Открыть Keyloom →';
+      open.textContent = daily ? 'К ежедневному плану' : 'Открыть Keyloom';
       open.addEventListener('click', () => {
         void send({ type: 'OPEN_DASHBOARD', ...(daily ? {view:'daily'} : {}) }).catch(() => {});
       });
@@ -55,11 +55,11 @@
     widget.setAttribute('data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
     panel.setAttribute('data-typing', String(Boolean(session)));
     panel.inert = Boolean(session);
-    const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
+    const label = `Keyloom: ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;
     nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
     nextButton.disabled = advancing;
-    const nextLabel = advancing ? 'Открываю…' : 'Следующее задание · Alt+N';
+    const nextLabel = advancing ? 'Открываю…' : 'Следующее задание (Alt+N)';
     if (nextButton.textContent !== nextLabel) nextButton.textContent = nextLabel;
     nextButton.title = dailyState?.nextLabel ?? '';
     const comparisons = dailyState?.comparisons ?? [];
@@ -215,7 +215,8 @@
     });
     const menu = document.createElement('button');
     menu.type = 'button';
-    menu.textContent = 'Команды · Alt+K';
+    menu.id = 'keyloom-open-commands';
+    menu.textContent = 'Команды (Alt+K)';
     menu.setAttribute('aria-keyshortcuts', 'Alt+K');
     menu.addEventListener('click', commands.open);
     panel.append(menu);
