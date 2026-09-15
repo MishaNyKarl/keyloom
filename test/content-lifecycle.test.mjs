@@ -14,7 +14,7 @@ async function harness(training=null, firefox=false) {
   const element = () => ({ shown:true, style:{},textContent:'',
     closest(selector) { return selector === '.hidden' && !this.shown ? this : null; },
     getClientRects() { return this.shown ? [1] : []; },
-    addEventListener(name,cb){this[name]=cb;},setAttribute(){},contains(){return false;} });
+    addEventListener(name,cb){this[name]=cb;},setAttribute(){},contains(){return false;},append(){} });
   const typing = element(), result = element(), badge = element(); result.shown = false;
   const input = {id:'wordsInput',value:' '};
   const newWord = () => ({ getAttribute:()=> String(wordIndex), hasAttribute:()=>true,
@@ -22,9 +22,10 @@ async function harness(training=null, firefox=false) {
   first = newWord();
   const root = {querySelector:()=>first};
   const mode = {textContent:training?'custom':'words', getAttribute:()=>null};
+  const created = [];
   const doc = {body:{append(){}},hidden:false,
     addEventListener(name, cb) { callbacks[name]=cb; },
-    createElement:()=>badge,
+    createElement:()=> { const node = created.length ? element() : badge; created.push(node); return node; },
     querySelector(selector) { return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':first})[selector] ?? null; },
     querySelectorAll:()=>[mode],
   };
@@ -46,7 +47,7 @@ async function harness(training=null, firefox=false) {
   await settle();
   const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
-  return {typing,result,badge,input,saves,type,changed,context,messages,mode,
+  return {typing,result,badge,input,saves,type,changed,context,messages,mode,created,
     nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
     async clickBadge(){badge.click();await settle();},
     replaceWord(){first=newWord();input.value=' ';},
@@ -132,4 +133,14 @@ test('Firefox browser namespace supports capture and result navigation without c
   assert.equal(h.saves[0].status, 'completed');
   await h.clickBadge();
   assert.equal(h.messages.at(-1).sessionId, h.saves[0].id);
+});
+
+test('explicit app button opens overview without a training result', async () => {
+  const h = await harness();
+  const button = h.created.find(node => node.id === 'keyloom-open-app');
+  assert.ok(button);
+  button.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.messages.at(-1).type, 'OPEN_DASHBOARD');
+  assert.equal(h.messages.at(-1).sessionId, undefined);
 });

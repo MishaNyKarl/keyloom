@@ -256,3 +256,26 @@
   width: 16px;
   height: 16px;
 }
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 2100;
+  pointer-events: none;
+  max-width: min(330px, calc(100vw - 16px));
+  padding: 12px 15px;
+  border: 1px solid #657449;
+  border-radius: 9px;
+  background: #1c211a;
+  color: #d8e2cb;
+  box-shadow: 0 8px 28px #0006;
+  font: 12px/1.7 system-ui;
+}
+.chart-tooltip strong {
+  display: block;
+  color: #d5e7a2;
+}
+.chart-node:focus {
+  outline: none;
+  stroke: #d5e7a2;
+  stroke-width: 2;
+}

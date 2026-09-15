@@ -22,9 +22,21 @@
       badge.id = 'keyloom-status';
       badge.type = 'button';
       badge.title = 'Открыть статистику Keyloom';
-      badge.style.cssText = 'position:fixed;bottom:14px;right:18px;z-index:1000;border:1px solid #5b6155;border-radius:8px;background:#20251f;color:#dbe7b7;font:12px/1.4 system-ui;padding:8px 12px;cursor:pointer;opacity:.85';
+      badge.style.cssText = 'border:0;background:transparent;color:#dbe7b7;font:12px/1.4 system-ui;padding:8px 12px;cursor:pointer';
       badge.addEventListener('click', () => void pendingSave.then(()=>send({ type: 'OPEN_DASHBOARD', sessionId:lastSavedId })).catch(() => {}));
-      document.body.append(badge);
+      const panel = document.createElement('div');
+      panel.id = 'keyloom-panel';
+      panel.style.cssText = 'position:fixed;bottom:14px;right:18px;max-width:calc(100vw - 36px);z-index:1000;display:flex;flex-wrap:wrap;border:1px solid #5b6155;border-radius:8px;background:#20251f;padding:4px;gap:4px';
+      const open = document.createElement('button');
+      open.id = 'keyloom-open-app';
+      open.type = 'button';
+      open.textContent = 'Открыть Keyloom →';
+      open.style.cssText = 'border:1px solid #69784e;border-radius:5px;background:#d5e7a2;color:#20251f;font:12px/1.4 system-ui;padding:8px 12px;cursor:pointer';
+      open.addEventListener('click', () => {
+        void send({ type: 'OPEN_DASHBOARD' }).catch(() => {});
+      });
+      panel.append(badge, open);
+      document.body.append(panel);
     }
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;

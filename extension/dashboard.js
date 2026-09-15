@@ -80,11 +80,13 @@
     container.replaceChildren(div);
   }
   function renderChart(container=$('chart'), data=currentProfile.sessions, metric='wpm') {
-    const sessions = data.filter(s => metric==='accuracy'||s.duration>=5).sort((a,b)=>a.date-b.date).slice(-24);
+    const sessions = data.filter(s => s.status === 'completed' && Number.isFinite(s[metric]) &&
+      s[metric] >= 0 && (metric !== 'accuracy' || s[metric] <= 100) &&
+      (metric === 'accuracy' || s.duration >= 5)).sort((a,b)=>a.date-b.date).slice(-24);
     const unit=metric==='wpm'?'WPM':'%';
     if (!sessions.length) return empty(container, 'Здесь появится твой прогресс', 'Нет завершённых тестов для выбранных фильтров.', true);
     const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 620 205'); svg.setAttribute('role', 'img');
+    const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 620 205'); svg.setAttribute('role', 'group');
     svg.setAttribute('aria-label', `${metric==='wpm'?'Скорость':'Точность'} последних ${sessions.length} тестов: ${sessions.map(s => Math.round(s[metric])).join(', ')} ${unit}`);
     function element(tag, attrs, text) {
       const el = document.createElementNS(ns, tag);
@@ -92,25 +94,60 @@
       if (text !== undefined) el.textContent = text;
       svg.append(el); return el;
     }
-    const max = metric==='accuracy'?100:Math.max(20, Math.ceil(Math.max(...sessions.map(s => s.wpm)) / 20) * 20);
-    const points = sessions.map((s, i) => [46 + i / Math.max(1, sessions.length - 1) * 554, 166 - s[metric] / max * 143]);
-    for (let i = 0; i <= 4; i++) {
-      const y = 166 - i / 4 * 143;
+    const scale = analytics.chartScale(sessions.map(s => s[metric]), metric);
+    const ordinate = value => 166 - (value - scale.min) / (scale.max - scale.min) * 143;
+    const points = sessions.map((s, i) => [sessions.length === 1 ? 323 : 46 + i / (sessions.length - 1) * 554, ordinate(s[metric])]);
+    for (const tick of scale.ticks) {
+      const y = ordinate(tick);
       element('line', { x1: 44, x2: 605, y1: y, y2: y, stroke: '#343b2e', 'stroke-dasharray': '3 5' });
-      element('text', { x: 8, y: y + 4, fill: '#7f8b74', 'font-size': 10, 'font-family': 'Consolas,monospace' }, Math.round(max * i / 4));
+      element('text', { x: 8, y: y + 4, fill: '#7f8b74', 'font-size': 10, 'font-family': 'Consolas,monospace' }, tick.toLocaleString('ru-RU', { maximumFractionDigits: 2 }));
     }
     if (points.length > 1) {
       element('path', { d: `M${points[0][0]},166 L${points.map(p => p.join(',')).join(' L')} L${points.at(-1)[0]},166 Z`, fill: '#d5e7a209' });
       element('polyline', { points: points.map(p => p.join(',')).join(' '), fill: 'none', stroke: '#d5e7a2', 'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' });
     }
+    const tooltip = document.createElement('div');
+    tooltip.className = 'chart-tooltip';
+    tooltip.id = container.id + '-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.hidden = true;
+    const hide = () => { tooltip.hidden = true; };
+    function show(session, node, event) {
+      tooltip.replaceChildren();
+      const heading = document.createElement('strong');
+      heading.textContent = new Date(session.date).toLocaleString('ru-RU');
+      const details = document.createElement('div');
+      details.textContent = `${format(session.wpm, 1)} WPM · ${format(session.accuracy, 1)}% точности`;
+      const context = document.createElement('div');
+      context.textContent = `${session.language === 'russian' ? 'Русский' : 'English'} · ${session.mode} · ${format(session.duration, 1)} с · исправлений: ${format(session.corrections)}`;
+      tooltip.append(heading, details, context);
+      tooltip.hidden = false;
+      const rect = node.getBoundingClientRect();
+      const x = event?.clientX ?? rect.right;
+      const y = event?.clientY ?? rect.bottom;
+      const width = tooltip.offsetWidth;
+      const height = tooltip.offsetHeight;
+      tooltip.style.left = Math.max(8, Math.min(x + 14, innerWidth - width - 8)) + 'px';
+      tooltip.style.top = Math.max(8, y + height + 22 > innerHeight ? y - height - 14 : y + 14) + 'px';
+    }
     points.forEach(([x, y], i) => {
-      const circle = element('circle', { cx: x, cy: y, r: i === points.length - 1 ? 4 : 2.5, fill: '#d5e7a2', stroke: '#1c1f1c', 'stroke-width': 1.5 });
-      const title = document.createElementNS(ns, 'title'); title.textContent = `${new Date(sessions[i].date).toLocaleDateString('ru-RU')}: ${format(sessions[i][metric])} ${unit}`; circle.append(title);
+      element('circle', { cx: x, cy: y, r: i === points.length - 1 ? 4 : 2.5, fill: '#d5e7a2', stroke: '#1c1f1c', 'stroke-width': 1.5 });
+      const hit = element('circle', { cx: x, cy: y, r: 10, fill: 'transparent', tabindex: 0,
+        class: 'chart-node', 'aria-describedby': tooltip.id,
+        'aria-label': `${new Date(sessions[i].date).toLocaleString('ru-RU')}: ${format(sessions[i].wpm, 1)} WPM, ${format(sessions[i].accuracy, 1)}%` });
+      hit.addEventListener('pointerenter', event => show(sessions[i], hit, event));
+      hit.addEventListener('pointermove', event => show(sessions[i], hit, event));
+      hit.addEventListener('pointerleave', hide);
+      hit.addEventListener('focus', () => show(sessions[i], hit));
+      hit.addEventListener('blur', hide);
+      hit.addEventListener('click', event => show(sessions[i], hit, event));
+      hit.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
       if (i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2)) {
         element('text', { x, y: 193, 'text-anchor': i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle', fill: '#7f8b74', 'font-size': 10, 'font-family': 'Consolas,monospace' }, new Date(sessions[i].date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
       }
     });
-    container.replaceChildren(svg);
+    container.replaceChildren(svg, tooltip);
+    container.onmouseleave = hide;
   }
   function table(headers) {
     const el = document.createElement('table'), thead = el.createTHead(), row = thead.insertRow();

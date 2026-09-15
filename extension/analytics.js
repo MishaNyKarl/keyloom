@@ -104,5 +104,25 @@
       reason:symbolMode ? ({uppercase:'Заглавные буквы',digits:'Цифры',punctuation:'Знаки препинания'})[kind] : kind==='mixed'?'Обычная практика':generated.targeted?(kind==='words'?'Сложные слова':'Прицельная практика'):'Калибровка навыка'};
   }
   function validPlan(p){return !!p&&(p.wordCount == null || (Number.isInteger(p.wordCount) && p.wordCount >= 10 && p.wordCount <= 500 && p.wordCount === p.words?.length))&&/^[a-zA-Z0-9-]{1,100}$/.test(p.id)&&['english','russian'].includes(p.language)&&['default','alternate'].includes(p.layout)&&KeyloomCore.KINDS.includes(p.kind)&&[30,60,120,180,300].includes(p.seconds)&&Array.isArray(p.words)&&p.words.length>=10&&p.words.length<=1000&&p.words.every(KeyloomCore.supportedToken)&&Array.isArray(p.targets)&&p.targets.length<=12&&p.targets.every(t=>KeyloomCore.validTarget(p.kind,t));}
-  globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan});
+  function chartScale(values, metric = 'wpm') {
+    const valid = values.filter(value => Number.isFinite(value) && value >= 0 &&
+      (metric !== 'accuracy' || value <= 100));
+    const low = valid.length ? Math.min(...valid) : 0;
+    const high = valid.length ? Math.max(...valid) : 0;
+    const padding = Math.max((high - low) * .1, metric === 'accuracy' ? .5 : 1);
+    const start = Math.max(0, low - padding);
+    const end = metric === 'accuracy' ? Math.min(100, high + padding) : high + padding;
+    const rough = (end - start) / 4;
+    const magnitude = 10 ** Math.floor(Math.log10(rough));
+    const step = [1, 2, 2.5, 5, 10].find(value => value * magnitude >= rough) * magnitude;
+    const min = Math.floor(start / step) * step;
+    const max = metric === 'accuracy' ? Math.min(100, Math.ceil(end / step) * step) : Math.ceil(end / step) * step;
+    const ticks = [];
+    for (let value = min; value < max - step / 100; value += step) {
+      ticks.push(Number(value.toFixed(6)));
+    }
+    ticks.push(Number(max.toFixed(6)));
+    return { min, max, ticks };
+  }
+  globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan,chartScale});
 })();

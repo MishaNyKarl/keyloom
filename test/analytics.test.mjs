@@ -39,3 +39,23 @@ test('calibration and Russian plans remain valid; malformed plans are rejected',
  const p=a.plan([],dict.russian,{language:'russian',seconds:30});assert.equal(p.calibrating,true);assert.equal(p.wpm,40);assert.ok(a.validPlan(p));
  assert.equal(a.validPlan({...p,words:['bad value']}),false);assert.equal(a.validPlan({...p,seconds:17}),false);
 });
+
+test('chart scale follows actual extrema instead of forcing a zero baseline', () => {
+  const scale = a.chartScale([71, 72, 74]);
+  assert.ok(scale.min > 60 && scale.min <= 71);
+  assert.ok(scale.max >= 74 && scale.max < 90);
+  assert.ok(scale.ticks.length >= 3);
+  assert.equal(new Set(scale.ticks).size, scale.ticks.length);
+});
+
+test('chart scale handles flat, empty, zero and accuracy boundary data', () => {
+  for (const values of [[], [0], [80, 80], [NaN, Infinity]]) {
+    const scale = a.chartScale(values);
+    assert.ok(Number.isFinite(scale.min) && scale.max > scale.min);
+  }
+  for (const values of [[99.2, 99.8], [100], [0], [0, 100]]) {
+    const scale = a.chartScale(values, 'accuracy');
+    assert.ok(scale.min >= 0 && scale.max <= 100 && scale.max > scale.min);
+    for (const value of values) assert.ok(value >= scale.min && value <= scale.max);
+  }
+});
