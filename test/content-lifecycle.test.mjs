@@ -24,10 +24,11 @@ async function harness(training=null, firefox=false, daily=null) {
   const root = {querySelector:()=>first};
   const mode = {textContent:training?'custom':'words', getAttribute:()=>null};
   const created = [];
+  let privacy = null;
   const doc = {body:{append(){}},hidden:false,
     addEventListener(name, cb) { callbacks[name]=cb; },
     createElement:()=> { const node = created.length ? element() : badge; created.push(node); return node; },
-    querySelector(selector) { return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':first})[selector] ?? null; },
+    querySelector(selector) { if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':first})[selector] ?? null; },
     querySelectorAll:()=>[mode],
   };
   const context = vm.createContext({document:doc, location:{pathname:'/'}, crypto:webcrypto, performance:{now:()=>clock+=100},
@@ -50,6 +51,10 @@ async function harness(training=null, firefox=false, daily=null) {
   const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
   return {get keyboard(){return keyboard;},typing,result,badge,input,saves,type,changed,context,messages,mode,created,
+    mountFooter() {
+      privacy = {nextElementSibling:null, after(node){this.nextElementSibling=node;}};
+      return privacy;
+    },
     changeTheme(theme){storageListener({theme:{newValue:theme}},'local');},
     nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
     async clickBadge(){badge.click();await settle();},
@@ -212,4 +217,20 @@ test('keyboard continuation shares button safeguards and is unavailable during t
   await next.run();
   assert.equal(next.available(),false);
   assert.equal(h.messages.filter(message=>message.type==='NEXT_DAILY').length,1);
+});
+
+test('compact footer entry docks after privacy when it mounts and collapses during typing', async () => {
+  const h = await harness();
+  const widget = h.created.find(node => node.id === 'keyloom-widget');
+  const privacy = h.mountFooter();
+  await h.changed();
+  assert.equal(privacy.nextElementSibling, widget);
+  widget.open = true;
+  h.type('st');
+  assert.equal(widget.open, false);
+  assert.equal(widget.inert, true);
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.equal(widget.inert, false);
 });

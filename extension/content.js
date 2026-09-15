@@ -7,7 +7,7 @@
   let settings = { enabled: false, layout: 'default' }, session = null, firstNode = null;
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
-  let dailyState = null, nextButton, comparisonNote, panel, theme = 'dark', advancing = false;
+  let dailyState = null, nextButton, comparisonNote, panel, widget, launcher, theme = 'dark', advancing = false;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -23,17 +23,14 @@
       badge.id = 'keyloom-status';
       badge.type = 'button';
       badge.title = 'Открыть статистику Keyloom';
-      badge.style.cssText = 'border:0;background:transparent;color:var(--text);font:12px/1.4 var(--mono);padding:8px 12px;cursor:pointer';
       badge.addEventListener('click', () => void pendingSave.then(()=>send({ type: 'OPEN_DASHBOARD', sessionId:lastSavedId })).catch(() => {}));
       panel = document.createElement('div');
       panel.id = 'keyloom-panel';
-      panel.style.cssText = 'position:fixed;bottom:14px;right:18px;max-width:calc(100vw - 36px);z-index:1000;display:flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:4px;gap:4px';
       const open = document.createElement('button');
       open.id = 'keyloom-open-app';
       open.type = 'button';
       const daily = location.search?.includes('keyloomDaily=');
       open.textContent = daily ? 'К ежедневному плану →' : 'Открыть Keyloom →';
-      open.style.cssText = 'border:1px solid var(--border);border-radius:5px;background:var(--accent);color:var(--on-accent);font:12px/1.4 var(--mono);padding:8px 12px;cursor:pointer';
       open.addEventListener('click', () => {
         void send({ type: 'OPEN_DASHBOARD', ...(daily ? {view:'daily'} : {}) }).catch(() => {});
       });
@@ -41,18 +38,38 @@
       nextButton.id = 'keyloom-next-step';
       nextButton.type = 'button';
       nextButton.setAttribute('aria-keyshortcuts', 'Alt+N');
-      nextButton.style.cssText = open.style.cssText;
       nextButton.addEventListener('click', advance);
       comparisonNote = document.createElement('span');
       comparisonNote.id = 'keyloom-daily-comparison';
-      comparisonNote.style.cssText = 'flex-basis:100%;max-width:480px;color:var(--text);font:12px/1.5 var(--mono);padding:4px 8px';
       panel.append(badge, open, nextButton, comparisonNote);
-      document.body.append(panel);
+      widget = document.createElement('details');
+      widget.id = 'keyloom-widget';
+      launcher = document.createElement('summary');
+      launcher.textContent = 'keyloom';
+      launcher.setAttribute('aria-label', 'Keyloom — результаты и команды');
+      widget.append(launcher, panel);
+      document.body.append(widget);
+      widget.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || !widget.open) return;
+        event.preventDefault();
+        event.stopPropagation();
+        widget.open = false;
+        launcher.focus();
+      });
     }
-    panel.setAttribute('data-keyloom-theme', ['dark','light','repose-dark'].includes(theme) ? theme : 'dark');
+    // The footer may mount later or be replaced during client-side navigation.
+    const privacy = document.querySelector('a[href="/privacy-policy.html"], a[href="https://monkeytype.com/privacy-policy.html"]');
+    if (privacy && privacy.nextElementSibling !== widget) privacy.after(widget);
+    if (!privacy && widget.isConnected === false) document.body.append(widget);
+    widget.setAttribute('data-docked', String(Boolean(privacy)));
+    widget.setAttribute('data-typing', String(Boolean(session)));
+    widget.inert = Boolean(session);
+    if (session) widget.open = false;
+    widget.setAttribute('data-keyloom-theme', ['dark','light','repose-dark'].includes(theme) ? theme : 'dark');
     panel.setAttribute('data-typing', String(Boolean(session)));
     panel.inert = Boolean(session);
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
+    launcher.title = label;
     if (badge.textContent !== label) badge.textContent = label;
     nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
     nextButton.disabled = advancing;
@@ -214,7 +231,6 @@
     menu.type = 'button';
     menu.textContent = 'Команды · Alt+K';
     menu.setAttribute('aria-keyshortcuts', 'Alt+K');
-    menu.style.cssText = badge.style.cssText;
     menu.addEventListener('click', commands.open);
     panel.append(menu);
   }
