@@ -49,8 +49,8 @@ CI/CD сейчас обновляет личный API; он не публику
 PowerShell, после подготовки:
 
 ```powershell
-Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-0.8.0.zip -Force
-Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-0.8.0.zip -Force
+Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-0.9.0.zip -Force
+Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-0.9.0.zip -Force
 ```
 
 В пакет для установки загружается первый ZIP. Второй — в поле исходников для ревью.
