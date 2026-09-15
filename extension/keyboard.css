@@ -1,6 +1,10 @@
 #keyloom-command-menu {
   box-sizing: border-box;
-  width: min(750px, calc(100vw - 32px));
+  width: calc(100vw - 32px);
+  max-width: 600px;
+  outline: none;
+  box-shadow: 0 0 0 .2em #0000;
+  transition: outline .125s;
   max-height: 80vh;
   margin: 8vh auto auto;
   padding: 0;
@@ -10,6 +14,9 @@
   color: var(--sub-color, var(--muted));
   font: 16px/1.5 var(--mono);
   overflow: hidden;
+}
+#keyloom-command-menu[open] {
+  display: block;
 }
 #keyloom-command-menu::backdrop {
   background: #0009;
@@ -121,72 +128,52 @@ html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important
 #keyloom-panel[data-typing=true] { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) { #keyloom-panel { transition: opacity .15s; } }
 #keyloom-widget {
-  position: relative;
-  display: inline-block;
-  align-self: center;
-  color: var(--sub-color, var(--muted));
-  font: 14px/1.25 var(--mono);
-}
-#keyloom-widget[data-docked=false] {
   position: fixed;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
-}
-#keyloom-widget > summary {
-  list-style: none;
-  background: var(--sub-alt-color, var(--panel));
-  padding: .5em .75em;
-  cursor: pointer;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-#keyloom-widget > summary::-webkit-details-marker {
-  display: none;
-}
-#keyloom-widget > summary:hover,
-#keyloom-widget[open] > summary {
-  color: var(--text-color, var(--text));
-  background: var(--sub-alt-color, var(--panel));
+  width: max-content;
+  max-width: min(600px, calc(100vw - 32px));
+  color: var(--sub-color, var(--muted));
+  font: 14px/1.25 var(--mono);
 }
 #keyloom-panel {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
   box-sizing: border-box;
-  width: min(460px, calc(100vw - 32px));
   display: flex;
+  justify-content: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
+  gap: 4px 12px;
+  padding: 10px 16px;
   border: 0;
+  outline: none;
+  box-shadow: 0 0 0 .2em #0000;
   border-radius: 10px;
   background: var(--sub-alt-color, var(--panel));
-  color: var(--text-color, var(--text));
+  color: var(--sub-color, var(--muted));
 }
 #keyloom-panel button {
-  flex: 1 1 auto;
   border: 0;
-  border-radius: 8px;
-  padding: 10px 14px;
-  background: var(--main-color, var(--accent));
-  color: var(--bg-color, var(--on-accent));
+  border-radius: 4px;
+  padding: 4px 0;
+  background: transparent;
+  color: inherit;
   font: inherit;
   cursor: pointer;
 }
-#keyloom-panel button:hover {
-  background: var(--text-color, var(--text));
+#keyloom-panel button:hover,
+#keyloom-panel button:focus-visible,
+#keyloom-panel #keyloom-next-step {
+  color: var(--main-color, var(--accent));
+}
+#keyloom-panel button:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 #keyloom-panel button:disabled {
   opacity: .5;
   cursor: wait;
-}
-#keyloom-widget :focus-visible {
-  outline: 2px solid var(--main-color, var(--accent));
-  outline-offset: 3px;
 }
 #keyloom-panel [hidden] {
   display: none;
@@ -200,10 +187,9 @@ html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important
   opacity: 0;
   pointer-events: none;
 }
-@media (max-width: 600px) {
-  #keyloom-widget[open] #keyloom-panel {
-    position: fixed;
-    bottom: 64px;
-    left: 50%;
-  }
+/* Only the result ad slots supplied by Monkeytype, including their spacer. */
+body:has(#keyloom-widget) #ad-result-wrapper,
+body:has(#keyloom-widget) #ad-result-small-wrapper,
+body:has(#keyloom-widget) .full-width:has(> #ad-result-wrapper) {
+  display: none !important;
 }

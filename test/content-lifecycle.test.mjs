@@ -219,15 +219,15 @@ test('keyboard continuation shares button safeguards and is unavailable during t
   assert.equal(h.messages.filter(message=>message.type==='NEXT_DAILY').length,1);
 });
 
-test('compact footer entry docks after privacy when it mounts and collapses during typing', async () => {
+test('persistent controls stay separate from privacy and become inert during typing', async () => {
   const h = await harness();
   const widget = h.created.find(node => node.id === 'keyloom-widget');
   const privacy = h.mountFooter();
   await h.changed();
-  assert.equal(privacy.nextElementSibling, widget);
-  widget.open = true;
+  assert.equal(privacy.nextElementSibling, null);
+  assert.equal(widget.open, undefined);
   h.type('st');
-  assert.equal(widget.open, false);
+  assert.equal(widget.open, undefined);
   assert.equal(widget.inert, true);
   h.typing.shown = false;
   h.result.shown = true;

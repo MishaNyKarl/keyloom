@@ -7,7 +7,7 @@
   let settings = { enabled: false, layout: 'default' }, session = null, firstNode = null;
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
-  let dailyState = null, nextButton, comparisonNote, panel, widget, launcher, theme = 'dark', advancing = false;
+  let dailyState = null, nextButton, comparisonNote, panel, widget, theme = 'dark', advancing = false;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -42,34 +42,20 @@
       comparisonNote = document.createElement('span');
       comparisonNote.id = 'keyloom-daily-comparison';
       panel.append(badge, open, nextButton, comparisonNote);
-      widget = document.createElement('details');
+      widget = document.createElement('div');
       widget.id = 'keyloom-widget';
-      launcher = document.createElement('summary');
-      launcher.textContent = 'keyloom';
-      launcher.setAttribute('aria-label', 'Keyloom — результаты и команды');
-      widget.append(launcher, panel);
+      widget.setAttribute('role', 'region');
+      widget.setAttribute('aria-label', 'Keyloom — результаты и команды');
+      widget.append(panel);
       document.body.append(widget);
-      widget.addEventListener('keydown', event => {
-        if (event.key !== 'Escape' || !widget.open) return;
-        event.preventDefault();
-        event.stopPropagation();
-        widget.open = false;
-        launcher.focus();
-      });
     }
-    // The footer may mount later or be replaced during client-side navigation.
-    const privacy = document.querySelector('a[href="/privacy-policy.html"], a[href="https://monkeytype.com/privacy-policy.html"]');
-    if (privacy && privacy.nextElementSibling !== widget) privacy.after(widget);
-    if (!privacy && widget.isConnected === false) document.body.append(widget);
-    widget.setAttribute('data-docked', String(Boolean(privacy)));
+    if (widget.isConnected === false) document.body.append(widget);
     widget.setAttribute('data-typing', String(Boolean(session)));
     widget.inert = Boolean(session);
-    if (session) widget.open = false;
     widget.setAttribute('data-keyloom-theme', ['dark','light','repose-dark'].includes(theme) ? theme : 'dark');
     panel.setAttribute('data-typing', String(Boolean(session)));
     panel.inert = Boolean(session);
     const label = `keyloom · ${settings.enabled ? status : 'На паузе'}`;
-    launcher.title = label;
     if (badge.textContent !== label) badge.textContent = label;
     nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
     nextButton.disabled = advancing;
