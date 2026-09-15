@@ -1,5 +1,5 @@
 if (typeof importScripts === 'function') {
-  importScripts('core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'sync.js');
+  importScripts('core.js', 'analytics.js', 'learning.js', 'daily.js', 'words.js', 'vendor/lz-string.js', 'practice.js', 'sync.js');
 }
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 const defaults = { enabled: true, layout: 'default' };
@@ -11,7 +11,7 @@ function syncPermissions(config) {
       ? { data_collection: ['websiteActivity', 'authenticationInfo'] } : {}) };
 }
 async function synchronize() {
-  const { syncConfig, sessions = [] } = await extensionApi.storage.local.get(['syncConfig', 'sessions']);
+  const { syncConfig, sessions = [], learning } = await extensionApi.storage.local.get(['syncConfig', 'sessions', 'learning']);
   if (!syncConfig?.enabled) return { synchronized: false, errorCode: 'SYNC_DISABLED' };
   try {
     if (!await extensionApi.permissions.contains(syncPermissions(syncConfig))) {
@@ -19,6 +19,7 @@ async function synchronize() {
     }
     const result = await KeyloomSync.exchange(syncConfig, sessions);
     await extensionApi.storage.local.set({ sessions: result.sessions,
+      learning: KeyloomLearning.ingest(learning, result.sessions),
       syncStatus: { date: Date.now(), total: result.total, error: null } });
     return { synchronized: true };
   } catch (error) {
@@ -41,13 +42,16 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
   const fromMonkeytype = sender.id === extensionApi.runtime.id && sender.url?.startsWith('https://monkeytype.com/');
   if (!fromExtension && !fromMonkeytype) return;
   queue = queue.catch(() => {}).then(async () => {
-    const { sessions = [], settings = defaults, exercises = [] } = await extensionApi.storage.local.get(['sessions', 'settings','exercises']);
+    const { sessions = [], settings = defaults, exercises = [], learning: savedLearning,
+      dailies = [], dailyPrefs } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs']);
+    const learning = savedLearning ?? KeyloomLearning.ingest(null, sessions);
+    if (!savedLearning) await extensionApi.storage.local.set({learning});
     if (message.type === 'GET_STATE') {
       const id=fromMonkeytype?new URL(sender.url).searchParams.get('keyloomExercise'):null;
       const { syncConfig, syncStatus } = fromExtension
         ? await extensionApi.storage.local.get(['syncConfig', 'syncStatus']) : {};
       const sync = { enabled: Boolean(syncConfig?.enabled), url: syncConfig?.url ?? '', ...syncStatus };
-      return { sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync}:{training:exercises.find(p=>p.id===id)??null}) };
+      return { sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null}) };
     }
     if (message.type === 'SAVE_SESSION' && fromMonkeytype) {
       if (!settings.enabled) return { ignored: true };
@@ -59,17 +63,65 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
         else incoming.training={id:plan.id,targets:plan.targets,kind:plan.kind,seconds:plan.seconds,...(plan.wordCount ? {wordCount:plan.wordCount} : {})};
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
-      await extensionApi.storage.local.set({ sessions: next });
+      const accepted = next.find(row => row.id === incoming.id);
+      const updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, sender.url, message.configuredSeconds) : dailies;
+      await extensionApi.storage.local.set({ sessions: next,
+        learning: KeyloomLearning.ingest(learning, [incoming]),
+        dailies: updatedDailies });
       await scheduleSync();
-      return { saved: true };
+      let dailyStep;
+      if (new URL(sender.url).searchParams.has('keyloomDaily')) {
+        dailyStep = updatedDailies.some(plan => plan.steps.some(step => step.result?.id === incoming.id)) ? 'completed' : 'mismatch';
+      }
+      return { saved: true, dailyStep };
     }
     if (message.type === 'OPEN_DASHBOARD') {
       const result=sessions.find(s=>s.id===message.sessionId);
-      const suffix=result?'?session='+encodeURIComponent(result.id)+'&language='+result.language+'#practice':'';
+      const dailyResult = dailies.some(plan => plan.steps.some(step => step.result?.id === result?.id && result));
+      const dailyView = message.view === 'daily' && (fromExtension ||
+        dailies.some(plan => plan.id === new URL(sender.url).searchParams.get('keyloomDaily')));
+      let suffix = '';
+      if (dailyResult || dailyView) suffix = '#daily';
+      else if (result) suffix = '?session=' + encodeURIComponent(result.id) + '&language=' + result.language + '#practice';
       await extensionApi.tabs.create({ url: extensionApi.runtime.getURL('dashboard.html')+suffix });
       return { opened: true };
     }
     if (!fromExtension) throw new Error('Недоступная операция');
+    if (message.type === 'CREATE_DAILY') {
+      const plan = KeyloomDaily.create(message.options, sessions, settings.layout);
+      if (plan.prefs.targets) {
+        for (const step of plan.steps.filter(row => row.type === 'focus')) {
+          KeyloomDaily.exercise(plan, step, sessions, learning, KeyloomWords[step.language]);
+        }
+      }
+      await extensionApi.storage.local.set({dailies:[...dailies, plan].slice(-30), dailyPrefs:plan.prefs});
+      return {plan};
+    }
+    if (message.type === 'START_DAILY') {
+      if (!settings.enabled) throw new Error('Включите запись тестов перед тренировкой');
+      const daily = dailies.find(plan => plan.id === message.id);
+      if (!daily || daily.layout !== settings.layout) throw new Error('План не найден для текущей раскладки');
+      const step = daily.steps.find(row => !row.result);
+      if (!step) throw new Error('Все шаги плана уже завершены');
+      let url;
+      let updatedExercises = exercises;
+      if (['time','quote'].includes(step.type)) {
+        url = KeyloomDaily.nativeUrl(daily, step);
+      } else {
+        const plan = KeyloomDaily.exercise(daily, step, sessions, learning, KeyloomWords[step.language]);
+        if (!KeyloomAnalytics.validPlan(plan)) throw new Error('Не удалось подготовить шаг плана');
+        step.exerciseId = plan.id;
+        step.targets = plan.targets;
+        step.kind = plan.kind;
+        updatedExercises = [...exercises, plan].slice(-40);
+        url = KeyloomPractice.url(plan.words, plan.language, plan.id);
+      }
+      step.startedAt = Date.now();
+      await extensionApi.storage.local.set({dailies, exercises:updatedExercises});
+      await extensionApi.tabs.create({url:url + '&keyloomDaily=' + encodeURIComponent(daily.id) +
+        '&keyloomStep=' + encodeURIComponent(step.id)});
+      return {started:true};
+    }
     if (message.type === 'CONNECT_SYNC') {
       const config = KeyloomSync.configuration(message.config);
       if (!await extensionApi.permissions.contains(syncPermissions(config))) {
@@ -77,6 +129,7 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       }
       const result = await KeyloomSync.exchange(config, sessions);
       await extensionApi.storage.local.set({ syncConfig: config, sessions: result.sessions,
+        learning: KeyloomLearning.ingest(learning, result.sessions),
         syncStatus: { date: Date.now(), total: result.total, error: null } });
       return { connected: true };
     }
@@ -103,7 +156,8 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     }
     if (message.type === 'IMPORT') {
       const next = KeyloomCore.mergeSessions(sessions, message.sessions);
-      await extensionApi.storage.local.set({ sessions: next });
+      const mergedLearning = message.learning ? KeyloomLearning.merge(learning, message.learning) : learning;
+      await extensionApi.storage.local.set({ sessions: next, learning:KeyloomLearning.ingest(mergedLearning, message.sessions) });
       await scheduleSync();
       return { count: next.length };
     }

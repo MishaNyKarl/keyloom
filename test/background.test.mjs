@@ -9,8 +9,8 @@ async function harness(firefox = false) {
   const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
   const storage = { sessions: [], settings: { enabled: true, layout: 'default' } };
   let handler;
-  const context = vm.createContext({ crypto: webcrypto, TextEncoder, TextDecoder, AbortSignal, console, URL });
-  const scripts = Object.fromEntries(await Promise.all(['core.js','analytics.js','vendor/lz-string.js','practice.js','sync.js'].map(async name=>[name,await readFile(new URL('../extension/'+name,import.meta.url),'utf8')])));
+  const context = vm.createContext({ crypto: webcrypto, TextEncoder, TextDecoder, AbortSignal, console, URL, structuredClone });
+  const scripts = Object.fromEntries(await Promise.all(['core.js','analytics.js','learning.js','daily.js','words.js','vendor/lz-string.js','practice.js','sync.js'].map(async name=>[name,await readFile(new URL('../extension/'+name,import.meta.url),'utf8')])));
   context.importScripts = (...names) => names.forEach(name=>vm.runInContext(scripts[name], context));
   const opened=[];
   context.chrome = {
@@ -24,7 +24,7 @@ async function harness(firefox = false) {
     context.browser.runtime.getURL = path => 'moz-extension://test-extension/' + path;
     delete context.chrome;
     delete context.importScripts;
-    for (const name of ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js','sync.js']) {
+    for (const name of ['core.js', 'analytics.js', 'learning.js', 'daily.js', 'words.js', 'vendor/lz-string.js', 'practice.js','sync.js']) {
       vm.runInContext(scripts[name], context);
     }
   }
@@ -156,4 +156,41 @@ test('Firefox event page saves results, opens its own dashboard and registers pr
   assert.equal((await h.send({ type: 'START_PRACTICE', plan }, page)).ok, true);
   assert.equal(new URL(h.opened.at(-1)).searchParams.get('keyloomExercise'), plan.id);
   assert.equal(await h.send({ type: 'GET_STATE' }, 'https://unrelated.example/'), undefined);
+});
+
+test('daily launch and completion persist, reject untrusted commands and ignore duplicate saves', async () => {
+  const h = await harness();
+  const page = 'chrome-extension://test-extension/dashboard.html';
+  assert.equal((await h.send({type:'CREATE_DAILY',options:{}})).ok,false);
+  const response = await h.send({type:'CREATE_DAILY',options:{languages:'english',repeat:false,repair:false,quote:false}},page);
+  assert.equal(response.ok,true);
+  const id = response.plan.id;
+  assert.equal((await h.send({type:'START_DAILY',id},page)).ok,true);
+  const url = h.opened.at(-1);
+  const first = h.storage.dailies[0].steps[0];
+  const completed = {...h.session('daily-result'),mode:'time',duration:60,date:first.startedAt+1};
+  await Promise.all([h.send({type:'SAVE_SESSION',session:completed},url),h.send({type:'SAVE_SESSION',session:completed},url)]);
+  assert.equal(h.storage.dailies[0].steps.filter(step=>step.result).length,1);
+  await h.send({type:'OPEN_DASHBOARD',sessionId:completed.id},url);
+  assert.ok(h.opened.at(-1).endsWith('#daily'));
+  const state = await h.send({type:'GET_STATE'},page);
+  assert.equal(state.dailies[0].steps[0].result.id,completed.id);
+  assert.ok(state.learning.vocabulary['english:default'].includes('cat'));
+  const fromPage = await h.send({type:'GET_STATE'},url);
+  assert.equal(fromPage.learning,undefined);
+  assert.equal(fromPage.dailies,undefined);
+});
+
+test('learning migration, old backup import and invalid learning import preserve existing data', async () => {
+  const h = await harness();
+  const page = 'chrome-extension://test-extension/dashboard.html';
+  h.storage.sessions = [h.session('legacy')];
+  const first = await h.send({type:'GET_STATE'},page);
+  assert.ok(first.learning.vocabulary['english:default'].includes('cat'));
+  h.storage.sessions = [];
+  assert.ok((await h.send({type:'GET_STATE'},page)).learning.vocabulary['english:default'].includes('cat'));
+  const original = JSON.stringify(h.storage);
+  assert.equal((await h.send({type:'IMPORT',sessions:[h.session('other')],learning:{version:99}},page)).ok,false);
+  assert.equal(JSON.stringify(h.storage),original);
+  assert.equal((await h.send({type:'IMPORT',sessions:[h.session('old-backup')]},page)).ok,true);
 });

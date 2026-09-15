@@ -6,7 +6,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 export function firefoxManifest(chromium) {
   const manifest = structuredClone(chromium);
   manifest.background = {
-    scripts: ['core.js', 'analytics.js', 'vendor/lz-string.js', 'practice.js', 'sync.js', 'background.js']
+    scripts: ['core.js', 'analytics.js', 'learning.js', 'daily.js', 'words.js', 'vendor/lz-string.js', 'practice.js', 'sync.js', 'background.js']
   };
   manifest.browser_specific_settings = {
     gecko: {

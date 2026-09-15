@@ -30,10 +30,11 @@
       const open = document.createElement('button');
       open.id = 'keyloom-open-app';
       open.type = 'button';
-      open.textContent = 'Открыть Keyloom →';
+      const daily = location.search?.includes('keyloomDaily=');
+      open.textContent = daily ? 'К ежедневному плану →' : 'Открыть Keyloom →';
       open.style.cssText = 'border:1px solid #69784e;border-radius:5px;background:#d5e7a2;color:#20251f;font:12px/1.4 system-ui;padding:8px 12px;cursor:pointer';
       open.addEventListener('click', () => {
-        void send({ type: 'OPEN_DASHBOARD' }).catch(() => {});
+        void send({ type: 'OPEN_DASHBOARD', ...(daily ? {view:'daily'} : {}) }).catch(() => {});
       });
       panel.append(badge, open);
       document.body.append(panel);
@@ -59,10 +60,17 @@
     if(finished.training && (statusValue==='completed' && finished.maxWordIndex!==trainingPlan?.words.length-1)) delete finished.training;
     const result = core.analyze(finished.events, { ...finished, status: statusValue });
     // Persist aggregates only. Raw input and the full test text never leave this content script.
-    pendingSave=send({ type: 'SAVE_SESSION', session: result }).then(reply => {
+    pendingSave=send({ type: 'SAVE_SESSION', session: result, configuredSeconds:finished.configuredSeconds }).then(reply => {
       if(reply.saved)lastSavedId=result.id;
       if (session) return; // A delayed save response must not overwrite a new test's status.
-      status = reply.saved ? (statusValue === 'completed' ? 'Тест сохранён' : 'Тест прерван') : 'На паузе'; paint();
+      status = 'На паузе';
+      if (reply.saved) {
+        status = statusValue === 'completed' ? 'Тест сохранён' : 'Тест прерван';
+        if (statusValue === 'completed' && reply.dailyStep === 'mismatch') {
+          status = 'Тест сохранён · шаг не засчитан: открой его из плана';
+        }
+      }
+      paint();
     }).catch(() => {});
   }
   function check() {
@@ -118,7 +126,7 @@
       if (!['time', 'words', 'custom', 'quote'].includes(testMode)) { status = 'Режим не поддерживается'; paint(); return; }
       // Never collect a partial session when enabled or installed midway through a test.
       if (node.getAttribute('data-wordindex') !== '0' || value !== ' ' || deleting) { status = 'Начните новый тест'; paint(); return; }
-      session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
+      session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, configuredSeconds:configuration.configuredSeconds, language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
         layout: settings.layout, mode: testMode, events: [] };
       if(trainingPlan && testMode==='custom' && trainingPlan.layout===settings.layout && trainingPlan.language===session.language)session.training={id:trainingPlan.id,kind:trainingPlan.kind,targets:trainingPlan.targets,seconds:trainingPlan.seconds,...(trainingPlan.wordCount ? {wordCount:trainingPlan.wordCount} : {})};
     }

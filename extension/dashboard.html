@@ -9,6 +9,7 @@
   <script src="sync-ui.js" defer></script>
   <script src="core.js" defer></script><script src="words.js" defer></script>
   <script src="analytics.js" defer></script>
+  <script src="learning.js" defer></script><script src="daily.js" defer></script>
   <script src="practice-options.js" defer></script>
   <script src="vendor/lz-string.js" defer></script><script src="practice.js" defer></script>
   <script src="demo.js" defer></script><script src="dashboard.js" defer></script>
@@ -20,6 +21,7 @@
     <nav aria-label="Главная навигация">
       <button class="nav-item selected" data-view="overview"><span>◫</span>Обзор<span class="nav-dot"></span></button>
       <button class="nav-item" data-view="practice"><span>⌁</span>Тренировка</button>
+      <button class="nav-item" data-view="daily"><span>☷</span>Ежедневный план</button>
       <button class="nav-item" data-view="statistics"><span>▥</span>Статистика</button>
       <button class="nav-item" data-view="history"><span>◷</span>История</button>
       <button class="nav-item" data-view="settings"><span>⚙</span>Настройки</button>
@@ -51,6 +53,42 @@
           <article class="panel weaknesses"><div class="panel-heading"><div><h2>Здесь можно стать лучше</h2><p>Приоритет учитывает ошибки и чистую скорость.</p></div><div class="segments" aria-label="Тип статистики"><button data-group="pairs" class="active" aria-pressed="true">Пары</button><button data-group="sequences" aria-pressed="false">Связки</button><button data-group="words" aria-pressed="false">Слова</button></div></div><div id="weakness-table"></div><div class="panel-footer">От 5 наблюдений · редкие сочетания пока не ранжируем</div></article>
           <article class="panel keyboard-panel"><div class="panel-heading"><div><h2>Карта точности</h2><p>Где пальцам нужно чуть больше практики.</p></div></div><div id="keyboard" class="keyboard"></div><div class="heat-legend"><span>меньше ошибок</span><i></i><i></i><i></i><i></i><span>больше</span></div><p class="keyboard-note">Буквы, а не физические клавиши. Наведи, чтобы увидеть статистику.</p></article>
         </div>
+      </section>
+      <section id="daily" class="view" hidden>
+        <div class="page-heading"><div><div class="eyebrow">НЕБОЛЬШОЙ ШАГ КАЖДЫЙ ДЕНЬ</div><h1>План под твою цель<span>.</span></h1><p>Контроль → работа над ошибками → повторение → проверка в тексте.</p></div></div>
+        <form id="daily-form" class="panel daily-builder">
+          <div class="daily-fields">
+            <label>Шаблон<select id="daily-template"><option value="routine">Мой ритуал · 3 × 1 мин + both + quote</option><option value="speed">Разгон скорости</option><option value="accuracy">Чистый ввод</option><option value="text">Уверенность в текстах</option></select></label>
+            <label>Хочу улучшить<select id="daily-goal"><option value="balanced">Скорость и точность</option><option value="speed">Скорость</option><option value="accuracy">Точность</option><option value="text">Печать текстов</option></select></label>
+            <label>Минут печати в день<select id="daily-minutes"><option>5</option><option>10</option><option>15</option><option selected>20</option><option>30</option><option>45</option></select></label>
+            <label>Языки<select id="daily-languages"><option value="both">English + Русский · поровну</option><option value="english">English</option><option value="russian">Русский</option></select></label>
+            <label>Целевая скорость, WPM<input id="daily-target" type="number" min="10" max="300" value="80" required></label>
+          </div>
+          <details><summary>Настроить состав плана</summary>
+            <div class="daily-fields">
+              <label>Прицельные блоки<select id="daily-kind"><option value="auto">По моим слабым местам</option><option value="pairs">Пары</option><option value="sequences">Связки 3–5 букв</option><option value="words">Слова</option><option value="uppercase">Заглавные</option><option value="digits">Цифры</option><option value="punctuation">Пунктуация</option></select></label>
+              <label>Основных тестов на язык<input id="daily-rounds" type="number" min="1" max="5" value="3" required></label>
+              <label>Длина основного блока<select id="daily-seconds"><option value="30">30 секунд</option><option value="60" selected>1 минута</option><option value="120">2 минуты</option></select></label>
+              <label>Свои цели через пробел<input id="daily-targets" maxlength="300" placeholder="Например: th ing или ст про"></label>
+            </div>
+            <div class="daily-checks">
+              <label><input id="daily-repair" type="checkbox" checked> После теста — ошибочные и медленные слова</label>
+              <label><input id="daily-quote" type="checkbox" checked> Большая цитата, если хватает бюджета</label>
+              <label><input id="daily-repeat" type="checkbox" checked> Повторение ранее отработанных целей</label>
+              <label><input id="daily-numbers" type="checkbox"> Добавлять цифры</label>
+              <label><input id="daily-punctuation" type="checkbox"> Добавлять пунктуацию</label>
+            </div>
+          </details>
+          <p class="muted">Длительность цитат и прицельных блоков оценочная: она зависит от скорости. Паузы не входят в норму. При коротком плане часть блоков не поместится — проверь список перед стартом. Если для повторения или both ещё нет наблюдений, подбираем общие слабые места или калибровку. Собственные цели применяются к прицельным блокам; both берёт слова предыдущего теста.</p>
+          <button class="primary" type="submit">Составить новый план →</button>
+          <p id="daily-error" role="alert"></p>
+        </form>
+        <div id="daily-progress" class="stats-grid"></div>
+        <article class="panel daily-section"><h2>Маршрут на сегодня</h2><p id="daily-status" class="muted"></p><ol id="daily-steps" class="daily-steps"></ol><button id="daily-start" class="primary" type="button" hidden>Начать следующий шаг →</button></article>
+        <article class="panel daily-section"><h2>К твоей скорости</h2><div id="daily-forecast" class="daily-flow"></div><p class="muted">Это экстраполяция личной динамики, а не обещание результата. Диапазон отражает разброс тренда, не статистический доверительный интервал. Больше минут не означает пропорционально больший рост. Пропуски не обнуляют навык.</p></article>
+        <article class="panel daily-section"><h2>Пора повторить</h2><div id="daily-reviews"></div></article>
+        <article class="panel daily-section"><h2>Навык за пределами упражнения</h2><p class="muted">Сравниваем цели до тренировки и в последующих обычных time / words / quote. Нужно не меньше 5 наблюдений с каждой стороны. Это наблюдение, а не доказательство причинного эффекта.</p><div id="daily-transfer" class="history-scroll"></div></article>
+        <article class="panel daily-section"><h2>Персональный словарь</h2><p id="daily-vocabulary" class="muted"></p><label>Найти слово<input id="vocabulary-search" type="search" maxlength="100" placeholder="Начни вводить слово"></label><div id="vocabulary-words" class="focus-chips"></div></article>
       </section>
       <section id="practice" class="view" hidden>
         <div class="page-heading"><div><div class="eyebrow">ОСОЗНАННАЯ ПРАКТИКА</div><h1>Одна задача за раз<span>.</span></h1><p>Сначала точность. Скорость придёт с уверенностью.</p></div><button id="practice-customize" class="gear-button" aria-label="Настроить практику" title="Настроить практику">⚙</button></div>

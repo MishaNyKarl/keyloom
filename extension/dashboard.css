@@ -279,3 +279,89 @@
   stroke: #d5e7a2;
   stroke-width: 2;
 }
+
+.daily-builder, .daily-section {
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.daily-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.daily-fields label, .daily-section > label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.daily-fields input, .daily-section input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #151914;
+  color: var(--text);
+  padding: 10px;
+  max-width: 100%;
+}
+.daily-checks {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+  font-size: 12px;
+}
+.daily-builder summary {
+  cursor: pointer;
+  margin-bottom: 18px;
+  color: var(--accent);
+}
+.daily-steps {
+  padding-left: 28px;
+}
+.daily-steps li {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+.daily-steps li[data-state="done"] {
+  color: var(--accent);
+}
+.daily-steps li[data-state="next"] {
+  color: var(--text);
+  border-left: 3px solid var(--accent);
+}
+.daily-flow article {
+  margin: 18px 0;
+  padding: 16px;
+  background: #151914;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  line-height: 1.8;
+}
+#vocabulary-words {
+  margin-top: 18px;
+}
+#daily-error {
+  color: #e4ad95;
+}
+@media (max-width: 800px) {
+  .sidebar { flex-wrap: wrap; }
+  .sidebar nav { flex-wrap: wrap; justify-content: flex-start; }
+  .daily-builder, .daily-section { padding: 18px; }
+}
+.daily-milestones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.daily-milestones span {
+  flex: 1 1 180px;
+  padding: 14px;
+  border: 1px solid #485239;
+  border-radius: 8px;
+  color: var(--accent);
+  font: 13px/1.7 var(--mono);
+}

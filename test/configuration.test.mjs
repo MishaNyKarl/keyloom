@@ -36,3 +36,10 @@ test('read adapter identifies notices from their icons and honors ARIA toggle st
   assert.equal(selected(button('words',[],[],'true')),true);
   assert.equal(selected(button('words',['[--themable-button-text:var(--themable-button-active)]'])),true);
 });
+
+test('captures selected time duration without confusing words mode', () => {
+  const timed = KeyloomConfiguration.inspect({buttons:[{text:'time',selected:true},{text:'60',selected:true}]});
+  assert.equal(timed.configuredSeconds,60);
+  const words = KeyloomConfiguration.inspect({buttons:[{text:'words',selected:true},{text:'60',selected:true}]});
+  assert.equal(words.configuredSeconds,undefined);
+});

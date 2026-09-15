@@ -8,6 +8,7 @@
   const previewKey = fixture ? 'keyloom-fixture-v1' : 'keyloom-local-preview-v1';
   let state = { sessions: [], settings: { enabled: true, layout: 'default' } };
   let currentProfile, exercise, group = 'pairs', selectedFocus, toastTimer;
+  let dailyInitialized = false;
   const analytics=KeyloomAnalytics, query=new URLSearchParams(location.search);
   let selectedSessionId=query.get('session'),activeExerciseId=query.get('exercise'),detailPage=0,detailProfile;
   if(['english','russian'].includes(query.get('language')))$('language').value=query.get('language');
@@ -22,9 +23,18 @@
     let saved;
     try { saved = JSON.parse(localStorage.getItem(previewKey) ?? 'null'); } catch { /* recover a broken preview store */ }
     saved ??= { sessions: [], settings: { enabled: true, layout: 'default' } };
+    saved.learning = KeyloomLearning.ingest(saved.learning, saved.sessions);
     if (payload.type === 'GET_STATE') return saved;
     if (payload.type === 'SET_SETTINGS') saved.settings = payload.settings;
-    if (payload.type === 'IMPORT') saved.sessions = core.mergeSessions(saved.sessions, payload.sessions);
+    if (payload.type === 'IMPORT') {
+      saved.sessions = core.mergeSessions(saved.sessions, payload.sessions);
+      saved.learning = KeyloomLearning.ingest(payload.learning ? KeyloomLearning.merge(saved.learning, payload.learning) : saved.learning, payload.sessions);
+    }
+    if (payload.type === 'CREATE_DAILY') {
+      const plan = KeyloomDaily.create(payload.options, saved.sessions, saved.settings.layout);
+      saved.dailies = [...(saved.dailies ?? []), plan].slice(-30);
+      saved.dailyPrefs = plan.prefs;
+    }
     localStorage.setItem(previewKey, JSON.stringify(saved));
     return saved;
   }
@@ -32,6 +42,11 @@
     try {
       state = await message({ type: 'GET_STATE' });
       if (demo) state = { sessions: KeyloomDemo.sessions(), settings: { enabled: true, layout: 'default' } };
+      state.learning = KeyloomLearning.ingest(state.learning, state.sessions);
+      if (!dailyInitialized) {
+        setDailyFields(state.dailyPrefs ?? KeyloomDaily.options());
+        dailyInitialized = true;
+      }
       $('environment').textContent = demo ? 'ДЕМО' : installed ? 'РАСШИРЕНИЕ' : fixture ? 'ДАННЫЕ ТЕСТОВОГО СТЕНДА' : 'ЛОКАЛЬНЫЙ ПРЕДПРОСМОТР';
       $('demo-banner').hidden = !demo;
       $('preview-banner').hidden = demo || installed;
@@ -63,7 +78,7 @@
       if (currentCustom().seconds) $('practice-duration').value = String(currentCustom().seconds);
       makeExercise();
     }
-    renderInsights(); renderResults(); renderStatistics();
+    renderInsights(); renderResults(); renderStatistics(); renderDaily();
   }
   function chips(container, values) {
     container.replaceChildren(...values.map(text => {
@@ -234,7 +249,7 @@
     };
   }
   function makeExercise() {
-    exercise = analytics.plan(state.sessions, KeyloomWords[$('language').value], {language:$('language').value,layout:state.settings.layout,seconds:Number($('practice-duration').value),kind:$('practice-kind').value,focus:selectedFocus,manualTargets:currentCustom().source==='manual'?currentCustom().targets:[],ratio:currentCustom().ratio,wordCount:currentCustom().wordCount,extras:practiceExtras()});
+    exercise = analytics.plan(state.sessions, personalWords(), {language:$('language').value,layout:state.settings.layout,seconds:Number($('practice-duration').value),kind:$('practice-kind').value,focus:selectedFocus,manualTargets:currentCustom().source==='manual'?currentCustom().targets:[],ratio:currentCustom().ratio,wordCount:currentCustom().wordCount,extras:practiceExtras()});
     $('exercise-title').textContent = exercise.reason;
     const specialMode = ['uppercase', 'digits', 'punctuation'].includes(exercise.kind);
     $('custom-ratio').disabled = specialMode;
@@ -371,8 +386,180 @@
     rows.slice(detailPage*20,(detailPage+1)*20).forEach(r=>{const row=el.tBodies[0].insertRow();cell(row,r.key,'pair-key');cell(row,format(r.attempts));cell(row,format(r.errors),'error-value');cell(row,`${format((1-r.errorRate)*100,1)}%`);cell(row,r.timings.length>=3?`${format(r.ms)} мс`:'Мало данных','timing');cell(row,format(r.timings.length));});
     $('detail-table').replaceChildren(el);
   }
+  function personalWords() {
+    return [...KeyloomWords[$('language').value],
+      ...KeyloomLearning.vocabulary(state.learning, $('language').value, state.settings.layout)];
+  }
+  function setDailyFields(prefs) {
+    for (const key of ['goal','minutes','languages','target','kind','rounds','seconds','targets']) {
+      $('daily-' + key).value = String(prefs[key]);
+    }
+    for (const key of ['repair','quote','repeat','numbers','punctuation']) {
+      $('daily-' + key).checked = prefs[key];
+    }
+  }
+  function dailyOptions() {
+    const prefs = {};
+    for (const key of ['goal','languages','kind','targets']) prefs[key] = $('daily-' + key).value;
+    for (const key of ['minutes','target','rounds','seconds']) prefs[key] = Number($('daily-' + key).value);
+    for (const key of ['repair','quote','repeat','numbers','punctuation']) prefs[key] = $('daily-' + key).checked;
+    return KeyloomDaily.options(prefs);
+  }
+  function activeDaily() {
+    return (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout).at(-1);
+  }
+  function renderDaily() {
+    const daily = activeDaily();
+    const prefs = daily?.prefs ?? state.dailyPrefs ?? KeyloomDaily.options();
+    const languages = prefs.languages === 'both' ? ['english','russian'] : [prefs.languages];
+    const progress = KeyloomDaily.progress(state.sessions, state.dailies ?? [], prefs, state.settings.layout);
+    const today = analytics.day(Date.now());
+    const done = daily?.steps.filter(step => step.result).length ?? 0;
+    metricCards($('daily-progress'), [
+      ['Сегодня', format(progress.minutes, 1), '/ ' + prefs.minutes + ' мин', 'Фактическая печать, выбранные языки'],
+      ['Серия выполнения нормы', format(progress.streak), 'дней', 'По текущей норме и сохранённой истории'],
+      ['Шаги плана', `${done} / ${daily?.steps.length ?? 0}`, '', 'Завершённые тесты из этого маршрута'],
+      ['До нормы', format(Math.max(0, prefs.minutes - progress.minutes), 1), 'мин', 'Отдых и переключения не учитываются']
+    ]);
+    $('daily-steps').replaceChildren();
+    const next = daily?.steps.find(step => !step.result);
+    if (daily) {
+      for (const step of daily.steps) {
+        const item = document.createElement('li');
+        item.dataset.state = step.result ? 'done' : step === next ? 'next' : 'waiting';
+        item.textContent = `${step.result ? '✓ ' : ''}${step.language === 'russian' ? 'RU' : 'EN'} · ${step.label} · ≈ ${format(step.seconds / 60, 1)} мин`;
+        if (step.targets?.length) item.textContent += ' · ' + step.targets.join(' · ');
+        if (step.result) item.textContent += ` → ${format(step.result.wpm, 1)} WPM · ${format(step.result.accuracy, 1)}% · ${format(step.result.duration, 1)} с`;
+        $('daily-steps').append(item);
+      }
+      const duration = daily.steps.reduce((sum, step) => sum + step.seconds, 0) / 60;
+      $('daily-status').textContent = `${new Date(daily.date).toLocaleDateString('ru-RU')} · примерно ${format(duration, 1)} минут. ` +
+        (next ? 'Запусти выделенный шаг. После завершения вернись кнопкой статуса Keyloom; прогресс сохранится автоматически.' :
+          'Все шаги завершены. Если фактических минут меньше нормы, можно составить короткий дополнительный план.') +
+        (daily.day !== today ? ' Это сохранённый план предыдущего дня; его можно продолжить или составить новый.' : '') +
+        (!installed || demo ? ' В предпросмотре доступно планирование; запись шагов работает в установленном расширении.' : '');
+    } else {
+      $('daily-status').textContent = 'Выбери цель и время, затем составь план. Список шагов появится здесь до запуска тестов.';
+    }
+    $('daily-start').hidden = !next;
+    $('daily-start').disabled = !installed || demo;
+    $('daily-start').textContent = next?.startedAt ? 'Повторно открыть текущий шаг →' : 'Начать следующий шаг →';
+    $('daily-forecast').replaceChildren();
+    for (const language of languages) {
+      const estimate = KeyloomLearning.forecast(state.sessions, language, state.settings.layout,
+        prefs.minutes / languages.length, prefs.target);
+      const article = document.createElement('article');
+      const heading = document.createElement('strong');
+      heading.textContent = `${language === 'russian' ? 'Русский' : 'English'} · ${prefs.minutes / languages.length} мин/день → цель ${prefs.target} WPM`;
+      const text = document.createElement('p');
+      const reasons = {
+        data: `Собираем базу: ${estimate.tests} контрольных тестов, ${estimate.days} дней. Для прогноза нужны 14 минутных time-тестов с точностью ≥95%, минимум 7 разных дней за период от 14 дней; последний — не старше недели.`,
+        trend: 'Устойчивого положительного тренда пока нет. Продолжай контрольные минутные тесты: срок сейчас был бы выдумкой.',
+        load: `Выбранная нагрузка сильно отличается от наблюдавшейся (${format(estimate.observedMinutes, 1)} мин/день). Сначала соберём данные при новой норме.`,
+        ready: 'При сохранении похожей нагрузки и текущей динамики:'
+      };
+      text.textContent = (estimate.current === null ? '' : `Сейчас около ${format(estimate.current, 1)} WPM. `) + reasons[estimate.reason];
+      article.append(heading, text);
+      const flow = document.createElement('div');
+      flow.className = 'daily-milestones';
+      const current = document.createElement('span');
+      current.textContent = estimate.current === null ? 'Сейчас: измеряем базу' : `Сейчас: ${format(estimate.current, 1)} WPM`;
+      flow.append(current);
+      if (estimate.reason !== 'ready') {
+        const calibration = document.createElement('span');
+        calibration.textContent = '→ Регулярные минутные контрольные тесты';
+        const goal = document.createElement('span');
+        goal.textContent = `→ ${prefs.target} WPM · срок появится по данным`;
+        flow.append(calibration, goal);
+      }
+      for (const milestone of estimate.milestones ?? []) {
+        const point = document.createElement('span');
+        point.textContent = milestone.latest > 180 ? `→ ${milestone.wpm} WPM: за пределами надёжного горизонта в 6 месяцев` :
+          `→ ${milestone.wpm} WPM: ориентировочно ${Math.max(1, Math.ceil(milestone.earliest / 7))}–${Math.max(1, Math.ceil(milestone.latest / 7))} недель`;
+        flow.append(point);
+      }
+      article.append(flow);
+      if (estimate.current >= prefs.target) {
+        const achieved = document.createElement('p');
+        achieved.textContent = 'Текущая оценка уже достигает выбранной цели. Закрепи её в обычных тестах.';
+        article.append(achieved);
+      }
+      $('daily-forecast').append(article);
+    }
+    const due = KeyloomLearning.due(state.learning, $('language').value, state.settings.layout);
+    const repeats = $('daily-reviews');
+    repeats.replaceChildren();
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = due.length ? `${due.length} целей готовы к повторению в выбранном сверху языке.` :
+      'Просроченных повторений нет. После прицельных упражнений цели появятся здесь: ошибки возвращаем через день, успешные попытки — через 3, 7, 14 и 30 дней.';
+    repeats.append(note);
+    for (const row of due.slice(0, 12)) {
+      const button = document.createElement('button');
+      button.className = 'secondary';
+      button.textContent = row.target + ' · повторить';
+      button.addEventListener('click', () => {
+        $('practice-kind').value = row.kind;
+        selectedFocus = row.target;
+        makeExercise();
+        showView('practice');
+      });
+      repeats.append(button);
+    }
+    const transfers = KeyloomLearning.transfer(state.sessions, $('language').value, state.settings.layout);
+    if (!transfers.length) {
+      empty($('daily-transfer'), 'Начни с прицельной тренировки', 'Затем пройди обычный тест, чтобы проверить навык в новом контексте.');
+    } else {
+      const result = table(['ЦЕЛЬ','ДО / ПОСЛЕ','ОШИБКИ','ИНТЕРВАЛ']);
+      for (const item of transfers) {
+        const row = result.tBodies[0].insertRow();
+        cell(row, item.target);
+        cell(row, `${item.before.attempts} / ${item.after.attempts}`);
+        cell(row, item.ready ? `${format(item.before.error * 100, 1)}% → ${format(item.after.error * 100, 1)}%` : 'Мало наблюдений');
+        cell(row, item.ready && item.before.ms !== null && item.after.ms !== null ?
+          `${format(item.before.ms)} → ${format(item.after.ms)} мс` : 'Мало замеров');
+      }
+      $('daily-transfer').replaceChildren(result);
+    }
+    const words = KeyloomLearning.vocabulary(state.learning, $('language').value, state.settings.layout);
+    $('daily-vocabulary').textContent = `${words.length} / ${KeyloomLearning.WORD_LIMIT} слов в выбранном языке и раскладке. Слова не удаляются вместе со старыми тестами. Словарь и расписание повторений входят в JSON-экспорт; планы сохраняются локально, последние 30. Серверная синхронизация пока передаёт историю тестов, а не эти настройки.`;
+    const search = $('vocabulary-search').value.trim().toLowerCase();
+    chips($('vocabulary-words'), words.filter(word => word.includes(search)).slice(0, 50));
+  }
+  $('daily-template').addEventListener('change', () => {
+    const template = $('daily-template').value;
+    const prefs = KeyloomDaily.options();
+    if (template === 'speed') Object.assign(prefs, {goal:'speed', seconds:30, quote:false, rounds:5});
+    if (template === 'accuracy') Object.assign(prefs, {goal:'accuracy', quote:false, kind:'words'});
+    if (template === 'text') Object.assign(prefs, {goal:'text', kind:'punctuation', punctuation:true});
+    setDailyFields(prefs);
+  });
+  $('daily-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    $('daily-error').textContent = '';
+    try {
+      const options = dailyOptions();
+      if (demo) {
+        const plan = KeyloomDaily.create(options, state.sessions, state.settings.layout);
+        state.dailies = [...(state.dailies ?? []), plan].slice(-30);
+        renderDaily();
+      } else {
+        await message({type:'CREATE_DAILY', options});
+        await load();
+      }
+    } catch (error) { $('daily-error').textContent = error.message; }
+  });
+  $('daily-start').addEventListener('click', async () => {
+    $('daily-start').disabled = true;
+    try {
+      await message({type:'START_DAILY', id:activeDaily().id});
+      await load();
+    } catch (error) { $('daily-error').textContent = error.message; }
+    finally { $('daily-start').disabled = !installed || demo; }
+  });
+  $('vocabulary-search').addEventListener('input', renderDaily);
   function showView(name) {
-    if (!['overview','practice','statistics','history','settings'].includes(name)) name = 'overview';
+    if (!['overview','practice','daily','statistics','history','settings'].includes(name)) name = 'overview';
     document.querySelectorAll('.view').forEach(el => el.hidden = el.id !== name);
     document.querySelectorAll('[data-view]').forEach(button => {
       const active = button.dataset.view === name; button.classList.toggle('selected', active);
@@ -530,7 +717,7 @@
         wordCount: $('custom-volume').value === 'words' ? Number($('custom-count').value) : null,
         highlight: $('custom-highlight').checked
       };
-      analytics.plan(state.sessions, KeyloomWords[$('language').value], {
+      analytics.plan(state.sessions, personalWords(), {
         ...scope(), kind, seconds: Number($('custom-seconds').value),
         manualTargets: targets, ratio: next.ratio, wordCount: next.wordCount, extras: practiceExtras()
       });
@@ -553,7 +740,7 @@
   }
   $('capture-enabled').addEventListener('change', saveSettings); $('layout').addEventListener('change', saveSettings);
   $('export').addEventListener('click', () => {
-    const data = { app: 'keyloom', version: core.VERSION, exportedAt: new Date().toISOString(), sessions: state.sessions };
+    const data = { app: 'keyloom', version: core.VERSION, exportedAt: new Date().toISOString(), sessions: state.sessions, learning:state.learning };
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url; link.download = `keyloom-${demo ? 'demo-' : ''}${new Date().toISOString().slice(0,10)}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000); toast('Экспорт подготовлен');
@@ -563,13 +750,16 @@
       if (demo) throw new Error('Вернись к своим данным для импорта');
       const file = event.target.files[0]; if (!file) return;
       if (file.size > 8_000_000) throw new Error('Файл больше 8 МБ');
-      const sessions = core.parseBackup(await file.text());
-      await message({ type: 'IMPORT', sessions }); await load(); toast(`Импортировано сессий: ${sessions.length}`);
+      const text = await file.text();
+      const sessions = core.parseBackup(text);
+      const learning = JSON.parse(text).learning;
+      if (learning && !KeyloomLearning.validate(learning)) throw new Error('Некорректный персональный словарь');
+      await message({ type: 'IMPORT', sessions, learning }); await load(); toast(`Импортировано сессий: ${sessions.length}`);
     } catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
     finally { event.target.value = ''; }
   });
   document.querySelector('.file-button').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); $('import').click(); } });
-  if (installed) extensionApi.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.sessions || changes.settings || changes.syncStatus || changes.syncConfig)) void load(); });
+  if (installed) extensionApi.storage.onChanged.addListener((changes, area) => { if (area === 'local' && (changes.sessions || changes.settings || changes.syncStatus || changes.syncConfig || changes.learning || changes.dailies)) void load(); });
   else window.addEventListener('storage', () => void load());
   window.addEventListener('hashchange', () => showView(location.hash.slice(1)));
   showView(location.hash.slice(1)); void load();

@@ -35,7 +35,9 @@
     }
     const languageNotice = notices.find(item => item.icons?.includes('fa-globe-americas'));
     const language = languageNotice ? label(languageNotice.text).match(/^(english|russian)/)?.[1] : undefined;
-    return { ok: true, language };
+    const timeMode = buttons.some(button => button.selected && label(button.text) === 'time');
+    const duration = timeMode ? buttons.find(button => button.selected && /^\d+$/.test(label(button.text))) : null;
+    return { ok: true, language, ...(duration ? {configuredSeconds:Number(label(duration.text))} : {}) };
   }
   function read(doc) {
     const root = doc.querySelector('mount[data-component="testmodesnotice"]');
