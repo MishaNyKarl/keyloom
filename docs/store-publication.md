@@ -1,6 +1,6 @@
 # Публикация Keyloom в магазинах
 
-Состояние на 15 сентября 2026: подготовлена Firefox-сборка 0.7.2, публикация и подпись ещё не выполнены.
+Состояние на 15 сентября 2026: Firefox 0.7.3 отправлен в AMO с исходным архивом. Статус: «Ожидает проверки». Первоначальный черновик 0.7.2 отключён; в 0.7.3 заявлен только Firefox desktop 142+.
 CI/CD сейчас обновляет личный API; он не публикует расширения в магазинах автоматически.
 
 ## Что подготовить в продукте
@@ -49,13 +49,13 @@ CI/CD сейчас обновляет личный API; он не публику
 PowerShell, после подготовки:
 
 ```powershell
-Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-0.7.2.zip -Force
-Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-0.7.2.zip -Force
+Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-0.7.3.zip -Force
+Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-0.7.3.zip -Force
 ```
 
 В пакет для установки загружается первый ZIP. Второй — в поле исходников для ревью.
 Перед отправкой нужны финальные скриншоты с явно обозначенными демоданными,
-ручная проверка установленной версии и вход владельца в AMO. Условия соглашения
+ручная проверка установленного подписанного релиза. Вход в AMO выполнен, карточка и политика приватности отправлены. Условия соглашения
 разработчика принимает владелец аккаунта. Подписанный пакет выдаёт Mozilla.
 
 1. Войти в Mozilla Add-on Developer Hub, выбрать Submit a New Add-on и публикацию
