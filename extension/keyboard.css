@@ -118,7 +118,6 @@
 #keyloom-command-menu [role=alert]:empty {
   display: none;
 }
-html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important; }
 #keyloom-panel[data-typing=true] { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) { #keyloom-panel { transition: opacity .15s; } }
 #keyloom-widget, #keyloom-progress {

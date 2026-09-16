@@ -195,3 +195,6 @@ button, input, select, textarea,
 .daily-route > summary { cursor: pointer; color: var(--muted); }
 .daily-history-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 1em; }
 .daily-history-picker select { max-width: 100%; }
+
+/* Pointer idling belongs to the dashboard, never to the Monkeytype host. */
+html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important; }

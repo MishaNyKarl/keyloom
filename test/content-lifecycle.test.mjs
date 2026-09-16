@@ -12,10 +12,12 @@ async function harness(training=null, firefox=false, daily=null, today=null) {
   let storageListener, keyboard;
   let observer, first, clock = 0, wordIndex=0, target='street';
   const messages=[];
-  const element = () => ({ shown:true, style:{},textContent:'',
+  const element = () => ({ shown:true, style:{},textContent:'', attributes:new Map(), attributeWrites:0,
     closest(selector) { return selector === '.hidden' && !this.shown ? this : null; },
     getClientRects() { return this.shown ? [1] : []; },
-    addEventListener(name,cb){this[name]=cb;},setAttribute(){},contains(){return false;},append(){},prepend(){} });
+    addEventListener(name,cb){this[name]=cb;},
+    setAttribute(name,value){this.attributeWrites++;this.attributes.set(name,value);},
+    getAttribute(name){return this.attributes.get(name) ?? null;},contains(){return false;},append(){},prepend(){} });
   const typing = element(), result = element(), badge = element(); result.shown = false;
   const input = {id:'wordsInput',value:' '};
   const newWord = () => ({ getAttribute:()=> String(wordIndex), hasAttribute:()=>true,
@@ -257,4 +259,15 @@ test('daily menu labels reflect absent, unstarted and completed plans', async ()
     await command.run();
     assert.equal(h.messages.at(-1).type, 'RESUME_TODAY');
   }
+});
+
+test('typing and caret updates do not rewrite unchanged panel attributes', async () => {
+  const h = await harness();
+  h.type('s');
+  const writes = () => h.created.reduce((sum, node) => sum + node.attributeWrites, 0);
+  const before = writes();
+  h.type('treet');
+  for (let i = 0; i < 5; i++) await h.changed();
+  assert.equal(writes(), before);
+  assert.equal(h.keyboard.hidePointer ?? false, false);
 });

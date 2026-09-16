@@ -17,6 +17,10 @@
     } catch (error) { status = 'Не сохранено · обновите вкладку'; paint(); throw error; }
   };
   const visible = el => !!el && !el.closest('.hidden') && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  // Repeated attribute writes can invalidate the host's cursor/style state while typing.
+  function setAttributeIfChanged(node, name, value) {
+    if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+  }
   function paint() {
     if (!document.body) return;
     if (!badge) {
@@ -56,25 +60,28 @@
     }
     if (widget.isConnected === false) document.body.append(widget);
     if (progressPanel.isConnected === false) document.body.append(progressPanel);
-    widget.setAttribute('data-typing', String(Boolean(session)));
-    widget.inert = Boolean(session);
-    widget.setAttribute('data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
-    progressPanel.setAttribute('data-keyloom-theme', theme);
-    progressPanel.hidden = !todayProgress;
+    setAttributeIfChanged(widget, 'data-typing', String(Boolean(session)));
+    if (widget.inert !== Boolean(session)) widget.inert = Boolean(session);
+    setAttributeIfChanged(widget, 'data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
+    setAttributeIfChanged(progressPanel, 'data-keyloom-theme', theme);
+    if (progressPanel.hidden !== !todayProgress) progressPanel.hidden = !todayProgress;
     const progressText = todayProgress ?
       todayProgress.done + ' / ' + todayProgress.total + ' заданий    ≈ ' + todayProgress.minutes + ' мин осталось' : '';
     if (progressPanel.textContent !== progressText) progressPanel.textContent = progressText;
-    panel.setAttribute('data-typing', String(Boolean(session)));
-    panel.inert = Boolean(session);
+    setAttributeIfChanged(panel, 'data-typing', String(Boolean(session)));
+    if (panel.inert !== Boolean(session)) panel.inert = Boolean(session);
     const label = `Keyloom: ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;
-    nextButton.hidden = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
-    nextButton.disabled = advancing;
+    const hideNext = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
+    if (nextButton.hidden !== hideNext) nextButton.hidden = hideNext;
+    if (nextButton.disabled !== advancing) nextButton.disabled = advancing;
     const nextLabel = advancing ? 'Открываю…' : 'Следующее задание (Alt+N)';
     if (nextButton.textContent !== nextLabel) nextButton.textContent = nextLabel;
-    nextButton.title = dailyState?.nextLabel ?? '';
+    const nextTitle = dailyState?.nextLabel ?? '';
+    if (nextButton.title !== nextTitle) nextButton.title = nextTitle;
     const comparisons = dailyState?.comparisons ?? [];
-    comparisonNote.hidden = !comparisons.length || Boolean(session);
+    const hideComparison = !comparisons.length || Boolean(session);
+    if (comparisonNote.hidden !== hideComparison) comparisonNote.hidden = hideComparison;
     const comparisonText = comparisons.map(row =>
       `${row.language === 'russian' ? 'RU' : 'EN'}: до ${row.before.toFixed(1)} с → после ${row.after.toFixed(1)} с; точность ${row.beforeAccuracy.toFixed(1)}% → ${row.afterAccuracy.toFixed(1)}%`
     ).join(' · ') + (comparisons.length ? '. Повтор знакомого текста — результат этой тренировки, не оценка общего прогресса.' : '');
