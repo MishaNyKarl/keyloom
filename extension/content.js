@@ -224,7 +224,10 @@
           run:advance},
         {label:'Открыть Keyloom', alias:'dashboard overview', key:'KeyO',
           run:() => pendingSave.then(() => send({type:'OPEN_DASHBOARD',sessionId:lastSavedId}))},
-        {label:'Продолжить сегодняшний план', alias:'daily plan сегодня создать продолжить',
+        {get label() {
+          return todayProgress && todayProgress.done < todayProgress.total
+            ? 'Продолжить сегодняшний план' : 'Составить сегодняшний план';
+        }, alias:'daily plan сегодня создать продолжить',
           run:() => pendingSave.then(() => send({type:'RESUME_TODAY'}))}
       ]
     });

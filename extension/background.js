@@ -120,9 +120,8 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     }
     const resuming = message.type === 'RESUME_TODAY';
     const todayPlan = resuming ? dailies.filter(plan =>
-      plan.day === KeyloomAnalytics.day(Date.now()) && plan.layout === settings.layout &&
-      plan.steps.some(step => step.startedAt) && plan.steps.some(step => !step.result)).at(-1) : null;
-    if (resuming && !todayPlan) {
+      plan.day === KeyloomAnalytics.day(Date.now()) && plan.layout === settings.layout).at(-1) : null;
+    if (resuming && (!todayPlan || todayPlan.steps.every(step => step.result))) {
       await extensionApi.tabs.create({url:extensionApi.runtime.getURL('dashboard.html') + '#daily'});
       return {opened:true};
     }

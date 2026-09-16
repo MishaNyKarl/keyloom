@@ -244,3 +244,17 @@ test('today plan badge shows counts and estimated minutes without a linked test'
   const empty = await harness();
   assert.equal(empty.created.find(node => node.id === 'keyloom-progress').hidden, true);
 });
+
+test('daily menu labels reflect absent, unstarted and completed plans', async () => {
+  for (const [today, label] of [
+    [null, 'Составить сегодняшний план'],
+    [{done:0,total:24,minutes:20}, 'Продолжить сегодняшний план'],
+    [{done:24,total:24,minutes:0}, 'Составить сегодняшний план']
+  ]) {
+    const h = await harness(null, false, null, today);
+    const command = h.keyboard.commands.find(command => command.alias.includes('daily plan'));
+    assert.equal(command.label, label);
+    await command.run();
+    assert.equal(h.messages.at(-1).type, 'RESUME_TODAY');
+  }
+});

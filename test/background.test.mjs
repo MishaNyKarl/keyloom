@@ -260,15 +260,13 @@ test('full daily route replays warmup text and returns final comparison', async 
   }
 });
 
-test('resume today opens planner for absent, unstarted, old or completed plans', async () => {
+test('resume today opens planner for absent, old or completed plans', async () => {
   const h = await harness();
   const page = 'chrome-extension://test-extension/dashboard.html';
   await h.send({type:'RESUME_TODAY'});
   assert.ok(h.opened.at(-1).endsWith('#daily'));
   await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english'}},page);
   const plan = h.storage.dailies[0];
-  await h.send({type:'RESUME_TODAY'});
-  assert.ok(h.opened.at(-1).endsWith('#daily'));
   plan.steps[0].startedAt = Date.now();
   plan.day -= 1;
   await h.send({type:'RESUME_TODAY'});
@@ -342,3 +340,22 @@ test('quick warmup starts independently of daily plan and validates language', a
   h.storage.settings.enabled = false;
   assert.equal((await h.send({type:'START_WARMUP',language:'english'})).ok, false);
 });
+
+for (const firefox of [false, true]) {
+  test('resume today starts a newly created plan without prior starts: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const page = (firefox ? 'moz' : 'chrome') + '-extension://test-extension/dashboard.html';
+    await h.send({type:'CREATE_DAILY', options:{minutes:20,languages:'both'}}, page);
+    await h.send({type:'CREATE_DAILY', options:{minutes:25,languages:'both'}}, page);
+    const plan = h.storage.dailies.at(-1);
+    assert.equal(plan.steps.some(step => step.startedAt), false);
+    const reply = await h.send({type:'RESUME_TODAY'});
+    assert.equal(reply.ok, true);
+    assert.equal(reply.started, true);
+    assert.equal(h.opened.length, 0);
+    assert.equal(h.updated.at(-1).id, 7);
+    const url = new URL(h.updated.at(-1).url);
+    assert.equal(url.searchParams.get('keyloomDaily'), plan.id);
+    assert.equal(url.searchParams.get('keyloomStep'), plan.steps[0].id);
+  });
+}

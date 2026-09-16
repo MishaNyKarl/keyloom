@@ -597,6 +597,7 @@
     $('daily-error').textContent = '';
     try {
       const options = dailyOptions();
+      $('daily-history-date').value = '';
       if (demo) {
         const plan = KeyloomDaily.create(options, state.sessions, state.settings.layout);
         state.dailies = [...(state.dailies ?? []), plan].slice(-30);
@@ -605,6 +606,8 @@
         await message({type:'CREATE_DAILY', options});
         await load();
       }
+      document.querySelector('.daily-route').open = true;
+      toast('Новый план составлен. Можно начать первое задание.');
     } catch (error) { $('daily-error').textContent = error.message; }
   });
   $('daily-start').addEventListener('click', async () => {
@@ -834,7 +837,11 @@
         if (!installed || demo) throw new Error('Запуск разминки доступен в установленном расширении вне деморежима');
         await message({type:'START_WARMUP',language:$('language').value});
       }},
-    {label:'Продолжить сегодняшний план',alias:'start next daily сегодня создать продолжить',
+    {get label() {
+      const today = KeyloomDaily.todaySummary(state.dailies ?? [], state.settings.layout);
+      return today && today.done < today.total
+        ? 'Продолжить сегодняшний план' : 'Составить сегодняшний план';
+    },alias:'start next daily сегодня создать продолжить',
       run:async () => {
         if (!installed || demo) { navigate('daily'); return; }
         await message({type:'RESUME_TODAY'});
