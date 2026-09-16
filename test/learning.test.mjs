@@ -267,3 +267,30 @@ test('legacy daily speed target is ignored without affecting plan options', () =
   assert.equal(prefs.minutes, 25);
   assert.equal(prefs.languages, 'both');
 });
+
+test('daily results separate languages, preserve partial plans and summarize saved steps', () => {
+  assert.deepEqual(Array.from(d.results(null)), []);
+  const plan = {steps:[
+    {language:'english',type:'warmup',words:['same'],result:{duration:30,wpm:40,accuracy:98}},
+    {language:'english',type:'time',result:{duration:60,wpm:80,accuracy:99}},
+    {language:'english',type:'cooldown',words:['same'],result:{duration:25,wpm:48,accuracy:97}},
+    {language:'russian',type:'warmup',words:['текст'],result:{duration:35,wpm:30,accuracy:96}},
+    {language:'russian',type:'cooldown',words:['текст']}
+  ]};
+  const [en, ru] = d.results(plan);
+  assert.equal(en.done, 3);
+  assert.equal(en.seconds, 115);
+  assert.equal(en.medianWpm, 48);
+  assert.equal(en.bestWpm, 80);
+  assert.equal(en.beforeWpm, 40);
+  assert.equal(en.afterWpm, 48);
+  assert.equal(en.comparison.saved, 5);
+  assert.equal(ru.done, 1);
+  assert.equal(ru.total, 2);
+  assert.equal(ru.seconds, 35);
+  assert.equal(ru.comparison, null);
+  const empty = d.results({steps:[{language:'english',type:'time'}]})[0];
+  assert.equal(empty.medianWpm, null);
+  assert.equal(empty.bestWpm, null);
+  assert.equal(empty.seconds, 0);
+});

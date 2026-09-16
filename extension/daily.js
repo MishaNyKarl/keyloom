@@ -217,6 +217,27 @@
         beforeAccuracy:before.result.accuracy, afterAccuracy:after.result.accuracy}];
     });
   }
+  function results(daily) {
+    if (!daily) return [];
+    return ['english', 'russian'].flatMap(language => {
+      const steps = daily.steps.filter(step => step.language === language);
+      if (!steps.length) return [];
+      const completed = steps.filter(step => step.result);
+      const speeds = completed.map(step => step.result.wpm).filter(Number.isFinite).sort((a, b) => a - b);
+      const middle = Math.floor(speeds.length / 2);
+      const medianWpm = speeds.length ? (speeds.length % 2 ? speeds[middle] :
+        (speeds[middle - 1] + speeds[middle]) / 2) : null;
+      const before = steps.find(step => step.type === 'warmup')?.result;
+      const after = steps.find(step => step.type === 'cooldown')?.result;
+      const comparison = comparisons(daily).find(row => row.language === language) ?? null;
+      return [{language, done:completed.length, total:steps.length,
+        seconds:completed.reduce((sum, step) => sum + (Number.isFinite(step.result.duration) ? step.result.duration : 0), 0),
+        medianWpm, bestWpm:speeds.length ? speeds.at(-1) : null,
+        beforeWpm:comparison && Number.isFinite(before?.wpm) ? before.wpm : null,
+        afterWpm:comparison && Number.isFinite(after?.wpm) ? after.wpm : null,
+        comparison}];
+    });
+  }
   function todaySummary(plans, layout, now = Date.now()) {
     const plan = plans.filter(row => row.day === KeyloomAnalytics.day(now) && row.layout === layout).at(-1);
     if (!plan) return null;
@@ -224,5 +245,5 @@
     return {done:plan.steps.length - remaining.length, total:plan.steps.length,
       minutes:Math.ceil(remaining.reduce((sum, step) => sum + step.seconds, 0) / 60)};
   }
-  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons, todaySummary});
+  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons, results, todaySummary});
 })();

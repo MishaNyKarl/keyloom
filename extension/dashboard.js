@@ -444,6 +444,66 @@
       list.append(item);
     }
   }
+  function renderDailyResults(plan) {
+    const root = $('daily-history-comparison');
+    const element = (tag, className, text) => {
+      const node = document.createElement(tag);
+      node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+    for (const row of KeyloomDaily.results(plan)) {
+      const card = element('article', 'daily-result-card');
+      const header = element('header', 'daily-result-header');
+      header.append(element('h3', '', row.language === 'russian' ? 'Русский' : 'English'),
+        element('span', 'daily-result-state', row.done === row.total ? 'Завершено' : 'В процессе'));
+      card.append(header);
+      const overview = element('div', 'daily-result-overview');
+      for (const [label, value] of [
+        ['Задания', row.done + ' / ' + row.total],
+        ['Печать', format(row.seconds / 60, 1) + ' мин'],
+        ['Медиана скорости', format(row.medianWpm, 1) + ' WPM'],
+        ['Лучший шаг', format(row.bestWpm, 1) + ' WPM']
+      ]) {
+        const metric = element('div', '');
+        metric.append(element('span', 'muted', label), element('strong', '', value));
+        overview.append(metric);
+      }
+      card.append(overview);
+      const meter = element('progress', 'daily-result-progress');
+      meter.max = row.total;
+      meter.value = row.done;
+      meter.setAttribute('aria-label', 'Выполнено заданий: ' + row.done + ' из ' + row.total);
+      card.append(meter, element('h4', '', 'Один текст · до и после'));
+      if (row.comparison) {
+        const comparison = row.comparison;
+        const grid = element('div', 'daily-result-comparison');
+        for (const text of ['Показатель', 'До', 'После', 'Изменение']) {
+          grid.append(element('span', 'daily-result-column', text));
+        }
+        const addMetric = (label, before, after, unit, higherBetter) => {
+          const known = Number.isFinite(before) && Number.isFinite(after);
+          // Delta uses displayed precision, so the visible numbers always agree.
+          const delta = known ? Number(after.toFixed(1)) - Number(before.toFixed(1)) : null;
+          const change = element('span', 'daily-result-delta', known ?
+            (delta > 0 ? '+' : '') + format(delta === 0 ? 0 : delta, 1) + ' ' + unit : '—');
+          if (known && Math.abs(delta) > .01) change.dataset.trend =
+            (higherBetter ? delta > 0 : delta < 0) ? 'better' : 'worse';
+          grid.append(element('span', '', label), element('span', '', format(before, 1)),
+            element('strong', '', format(after, 1)), change);
+        };
+        addMetric('Время, с', comparison.before, comparison.after, 'с', false);
+        addMetric('Скорость, WPM', row.beforeWpm, row.afterWpm, 'WPM', true);
+        addMetric('Точность, %', comparison.beforeAccuracy, comparison.afterAccuracy, 'п.п.', true);
+        card.append(grid);
+      } else {
+        card.append(element('p', 'muted', 'Сравнение появится после разминки и повторного текста этого языка.'));
+      }
+      root.append(card);
+    }
+    root.append(element('p', 'daily-result-footnote muted',
+      'Медиана и лучший шаг учитывают разные упражнения этого плана. Сравнение до и после относится только к повторному тексту: знакомство с ним влияет на результат. Паузы не входят во время печати.'));
+  }
   function renderDailyHistory() {
     const select = $('daily-history-date');
     const selected = select.value || query.get('dailyResult');
@@ -472,13 +532,7 @@
     const minutes = completed.reduce((sum, step) => sum + step.result.duration, 0) / 60;
     $('daily-history-status').textContent = completed.length + ' / ' + plan.steps.length +
       ' заданий выполнено · ' + format(minutes, 1) + ' мин печати';
-    const comparisons = KeyloomDaily.comparisons(plan);
-    metricCards($('daily-history-comparison'), comparisons.map(row => [
-      row.language === 'russian' ? 'Русский · до → после' : 'English · до → после',
-      format(row.before, 1) + ' → ' + format(row.after, 1), 'с',
-      'Точность: ' + format(row.beforeAccuracy, 1) + '% → ' + format(row.afterAccuracy, 1) +
-        '% · ' + (row.saved >= 0 ? 'Быстрее на ' : 'Дольше на ') + format(Math.abs(row.saved), 1) + ' с'
-    ]));
+    renderDailyResults(plan);
     renderPlanSteps($('daily-history-steps'), plan);
   }
   function renderDaily() {
