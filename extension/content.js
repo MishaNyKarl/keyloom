@@ -7,7 +7,7 @@
   let settings = { enabled: false, layout: 'default' }, session = null, firstNode = null;
   let status = 'Готов к тесту', badge, checkQueued = false, disabledForTest = false;
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
-  let dailyState = null, nextButton, comparisonNote, panel, widget, theme = 'dark', advancing = false;
+  let dailyState = null, nextButton, panel, widget, theme = 'dark', advancing = false;
   let todayProgress = null, progressPanel;
   const send = async message => {
     try {
@@ -43,9 +43,7 @@
       nextButton.type = 'button';
       nextButton.setAttribute('aria-keyshortcuts', 'Alt+N');
       nextButton.addEventListener('click', advance);
-      comparisonNote = document.createElement('span');
-      comparisonNote.id = 'keyloom-daily-comparison';
-      panel.append(badge, open, nextButton, comparisonNote);
+      panel.append(badge, open, nextButton);
       widget = document.createElement('div');
       widget.id = 'keyloom-widget';
       widget.setAttribute('role', 'region');
@@ -79,13 +77,7 @@
     if (nextButton.textContent !== nextLabel) nextButton.textContent = nextLabel;
     const nextTitle = dailyState?.nextLabel ?? '';
     if (nextButton.title !== nextTitle) nextButton.title = nextTitle;
-    const comparisons = dailyState?.comparisons ?? [];
-    const hideComparison = !comparisons.length || Boolean(session);
-    if (comparisonNote.hidden !== hideComparison) comparisonNote.hidden = hideComparison;
-    const comparisonText = comparisons.map(row =>
-      `${row.language === 'russian' ? 'RU' : 'EN'}: до ${row.before.toFixed(1)} с → после ${row.after.toFixed(1)} с; точность ${row.beforeAccuracy.toFixed(1)}% → ${row.afterAccuracy.toFixed(1)}%`
-    ).join(' · ') + (comparisons.length ? '. Повтор знакомого текста — результат этой тренировки, не оценка общего прогресса.' : '');
-    if (comparisonNote.textContent !== comparisonText) comparisonNote.textContent = comparisonText;
+
   }
   async function advance() {
     if (advancing || session || !dailyState || dailyState.completed) return;

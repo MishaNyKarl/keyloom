@@ -228,37 +228,46 @@ for (const firefox of [false, true]) {
   });
 }
 
-test('full daily route replays warmup text and returns final comparison', async () => {
-  const h = await harness();
-  const page = h.context.chrome.runtime.getURL('dashboard.html');
-  const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english',
-    repeat:false,repair:true,quote:false}},page);
-  await h.send({type:'START_DAILY',id:plan.id},page);
-  let url = h.opened.at(-1);
-  let firstWords;
-  for (let index=0; index<plan.steps.length; index++) {
-    const step = h.storage.dailies[0].steps[index];
-    const state = await h.send({type:'GET_STATE'},url);
-    if (index === 0) firstWords = state.training.words;
-    if (step.type === 'cooldown') assert.deepEqual(state.training.words,firstWords);
-    const training = state.training ? {id:state.training.id,kind:state.training.kind,
-      targets:state.training.targets,seconds:state.training.seconds} : undefined;
-    const result = {...h.session('route-' + index),date:step.startedAt+1,
-      mode:training ? 'custom' : step.type,duration:step.type === 'cooldown' ? 25 : step.seconds,
-      ...(training ? {training} : {})};
-    const saved = await h.send({type:'SAVE_SESSION',session:result},url);
-    assert.equal(saved.dailyStep,'completed');
-    if (index < plan.steps.length-1) {
-      assert.equal((await h.send({type:'NEXT_DAILY'},url)).ok,true);
-      url = h.updated.at(-1).url;
-    } else {
-      assert.equal(saved.daily.completed,true);
-      assert.equal(saved.daily.comparisons[0].before,30);
-      assert.equal(saved.daily.comparisons[0].after,25);
-      assert.equal(saved.daily.comparisons[0].saved,5);
+for (const languages of ['english', 'both']) {
+  test('full daily route saves comparisons and opens Keyloom once: ' + languages, async () => {
+    const h = await harness();
+    const page = h.context.chrome.runtime.getURL('dashboard.html');
+    const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:5,languages,
+      repeat:false,repair:true,quote:false}},page);
+    await h.send({type:'START_DAILY',id:plan.id},page);
+    let url = h.opened.at(-1);
+    const firstWords = {};
+    for (let index=0; index<plan.steps.length; index++) {
+      const step = h.storage.dailies[0].steps[index];
+      const state = await h.send({type:'GET_STATE'},url);
+      if (step.type === 'warmup') firstWords[step.language] = state.training.words;
+      if (step.type === 'cooldown') assert.deepEqual(state.training.words,firstWords[step.language]);
+      const training = state.training ? {id:state.training.id,kind:state.training.kind,
+        targets:state.training.targets,seconds:state.training.seconds} : undefined;
+      const result = {...h.session('route-' + index),date:step.startedAt+1,language:step.language,
+        mode:training ? 'custom' : step.type,duration:step.type === 'cooldown' ? 25 : step.seconds,
+        ...(training ? {training} : {})};
+      const saved = await h.send({type:'SAVE_SESSION',session:result},url);
+      assert.equal(saved.dailyStep,'completed');
+      if (index < plan.steps.length-1) {
+        assert.equal(h.opened.length, 1);
+        assert.equal((await h.send({type:'NEXT_DAILY'},url)).ok,true);
+        url = h.updated.at(-1).url;
+      } else {
+        assert.equal(saved.daily.completed,true);
+        assert.equal(saved.daily.comparisons.length, languages === 'both' ? 2 : 1);
+        assert.equal(saved.daily.comparisons[0].before,30);
+        assert.equal(saved.daily.comparisons[0].after,25);
+        assert.equal(saved.daily.comparisons[0].saved,5);
+        assert.equal(new URL(h.opened.at(-1)).searchParams.get('dailyResult'), plan.id);
+        const openedCount = h.opened.length;
+        await h.send({type:'SAVE_SESSION',session:result},url);
+        assert.equal(h.opened.length, openedCount);
+      }
     }
-  }
-});
+  });
+
+}
 
 test('resume today opens planner for absent, old or completed plans', async () => {
   const h = await harness();

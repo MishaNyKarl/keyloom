@@ -101,6 +101,17 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
         learning: KeyloomLearning.ingest(learning, [incoming]),
         dailies: updatedDailies });
       await scheduleSync();
+      const completedPlan = updatedDailies.find(plan =>
+        plan.steps.some(step => step.result?.id === incoming.id) &&
+        plan.steps.every(step => step.result) &&
+        dailies.find(previous => previous.id === plan.id)?.steps.some(step => !step.result));
+      if (completedPlan) {
+        // Persist before navigating; duplicate delivery must not open another result tab.
+        try {
+          await extensionApi.tabs.create({url:extensionApi.runtime.getURL('dashboard.html') +
+            '?dailyResult=' + encodeURIComponent(completedPlan.id) + '#daily'});
+        } catch { /* The saved result remains available in daily plan history. */ }
+      }
       let dailyStep;
       if (new URL(sender.url).searchParams.has('keyloomDaily')) {
         dailyStep = updatedDailies.some(plan => plan.steps.some(step => step.result?.id === incoming.id)) ? 'completed' : 'mismatch';

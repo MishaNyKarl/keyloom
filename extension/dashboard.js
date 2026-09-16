@@ -446,7 +446,8 @@
   }
   function renderDailyHistory() {
     const select = $('daily-history-date');
-    const selected = select.value;
+    const selected = select.value || query.get('dailyResult');
+    query.delete('dailyResult');
     const plans = (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout)
       .slice().sort((a, b) => b.date - a.date);
     select.replaceChildren();
@@ -462,6 +463,7 @@
     if (plans.some(plan => plan.id === selected)) select.value = selected;
     const plan = plans.find(plan => plan.id === select.value) ?? plans[0];
     $('daily-history-steps').replaceChildren();
+    $('daily-history-comparison').replaceChildren();
     if (!plan) {
       $('daily-history-status').textContent = 'Сохранённых планов пока нет. Составь первый план выше.';
       return;
@@ -470,6 +472,13 @@
     const minutes = completed.reduce((sum, step) => sum + step.result.duration, 0) / 60;
     $('daily-history-status').textContent = completed.length + ' / ' + plan.steps.length +
       ' заданий выполнено · ' + format(minutes, 1) + ' мин печати';
+    const comparisons = KeyloomDaily.comparisons(plan);
+    metricCards($('daily-history-comparison'), comparisons.map(row => [
+      row.language === 'russian' ? 'Русский · до → после' : 'English · до → после',
+      format(row.before, 1) + ' → ' + format(row.after, 1), 'с',
+      'Точность: ' + format(row.beforeAccuracy, 1) + '% → ' + format(row.afterAccuracy, 1) +
+        '% · ' + (row.saved >= 0 ? 'Быстрее на ' : 'Дольше на ') + format(Math.abs(row.saved), 1) + ' с'
+    ]));
     renderPlanSteps($('daily-history-steps'), plan);
   }
   function renderDaily() {
@@ -861,5 +870,9 @@
     });
   }
   $('open-commands').addEventListener('click', commandMenu.open);
-  showView(location.hash.slice(1)); void load();
+  showView(location.hash.slice(1));
+  const showingDailyResult = query.has('dailyResult');
+  void load().then(() => {
+    if (showingDailyResult) $('daily-history-status').scrollIntoView({block:'center'});
+  });
 })();
