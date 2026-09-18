@@ -71,17 +71,18 @@
       if (prefs.repeat && budget >= 120) add('review', 30, 'Повторение по расписанию');
       const quote = quotes[language][Math.abs(Math.floor(now / 86400000)) % quotes[language].length];
       const quoteSeconds = Math.max(30, Math.ceil(quote[1] / (speed * 5) * 60 / 30) * 30);
-      const reserved = prefs.quote && budget >= quoteSeconds + 90 ? quoteSeconds + (prefs.repair ? 30 : 0) : 0;
+      const reserved = prefs.quote && budget >= quoteSeconds + 120 ? quoteSeconds + (prefs.repair ? 60 : 0) : 0;
       for (let round = 0; round < prefs.rounds; round++) {
-        const seconds = Math.min(round === 0 ? 60 : prefs.seconds, budget - reserved - (prefs.repair ? 30 : 0));
+        const repairSeconds = prefs.repair && budget - reserved >= 120 ? 60 : 0;
+        const seconds = Math.min(round === 0 ? 60 : prefs.seconds, budget - reserved - repairSeconds);
         if (seconds < 30) break;
         const targeted = round > 0 && (prefs.kind !== 'auto' || (prefs.goal === 'accuracy' && round % 2 === 1));
         add(targeted ? 'focus' : 'time', seconds, targeted ? 'Прицельный блок' : 'Контрольный тест');
-        if (prefs.repair) add('repair', 30, 'Ошибочные + медленные слова · both');
+        if (repairSeconds) add('repair', 60, 'Ошибочные + медленные слова · both');
       }
       if (reserved) {
         add('quote', quoteSeconds, 'Большая цитата · quote', {quoteId:quote[0]});
-        if (prefs.repair) add('repair', 30, 'Отработка цитаты · both');
+        if (prefs.repair) add('repair', 60, 'Отработка цитаты · both');
       }
       while (budget >= 30) {
         const seconds = Math.min(budget, prefs.goal === 'speed' ? 30 : 60);
@@ -130,20 +131,21 @@
       targets = profile[kind].filter(row => row.reliable && row.score > 0).slice(0, 6).map(row => row.key);
     }
     const words = [...dictionary, ...KeyloomLearning.vocabulary(learning, step.language, daily.layout)];
-    const seconds = [30,60,120,180,300].reduce((best, value) =>
+    const seconds = step.type === 'repair' ? 60 : [30,60,120,180,300].reduce((best, value) =>
       Math.abs(value - step.seconds) < Math.abs(best - step.seconds) ? value : best, 30);
     if (step.type === 'repair' && targets.length) {
       const selected = targets.filter(word => KeyloomCore.validTarget('words', word));
       if (selected.length) {
         const repeated = selected.flatMap(word => Array(2 + Math.floor(random() * 2)).fill(word));
-        // The capture contract requires at least ten words. Fill short repairs
-        // with neutral vocabulary without adding more target repetitions.
-        const fillers = [...new Set(words)].filter(word =>
-          !selected.includes(word) && alphabet.test(word) && KeyloomCore.supportedToken(word));
-        const fallback = step.language === 'russian' ? ['дом','мир','день','путь','свет','время','дело','рука','окно','город','место','жизнь','вода'] :
-          ['home','world','day','way','light','time','work','hand','window','city','place','life','water'];
-        for (const word of fallback) if (!selected.includes(word)) fillers.push(word);
-        while (repeated.length < 10) repeated.push(fillers[repeated.length % fillers.length]);
+        // Continue targeted repetitions until the text matches about one minute.
+        const characterBudget = Math.max(50, (profile.wpm || 40) * 5);
+        let count = repeated.join(' ').length;
+        let cursor = 0;
+        while ((count < characterBudget || repeated.length < 10) && repeated.length < 300) {
+          const word = selected[cursor++ % selected.length];
+          repeated.push(word);
+          count += word.length + 1;
+        }
         for (let index = repeated.length - 1; index > 0; index--) {
           const swap = Math.floor(random() * (index + 1));
           [repeated[index], repeated[swap]] = [repeated[swap], repeated[index]];
@@ -217,6 +219,62 @@
         beforeAccuracy:before.result.accuracy, afterAccuracy:after.result.accuracy}];
     });
   }
+  function importPlans(existing, incoming) {
+    if (incoming === undefined) return existing;
+    const fail = () => { throw new Error('Некорректные ежедневные планы в файле'); };
+    if (!Array.isArray(incoming) || incoming.length > 30 || JSON.stringify(incoming).length > 2000000) fail();
+    const text = value => typeof value === 'string' && value.length > 0 && value.length <= 300;
+    const number = (value, max) => Number.isFinite(value) && value >= 0 && value <= max;
+    const cleaned = incoming.map(plan => {
+      if (!plan || !text(plan.id) || !number(plan.date, 8640000000000000) ||
+        !['default','alternate'].includes(plan.layout) || !Array.isArray(plan.steps) ||
+        !plan.steps.length || plan.steps.length > 240) fail();
+      const prefs = options(plan.prefs);
+      const ids = new Set();
+      const steps = plan.steps.map(step => {
+        if (!step || !text(step.id) || ids.has(step.id) || !text(step.label) ||
+          !['english','russian'].includes(step.language) ||
+          !['warmup','cooldown','time','quote','repair','focus','review'].includes(step.type) ||
+          !number(step.seconds, 3600) || step.seconds < 1) fail();
+        ids.add(step.id);
+        const row = {id:step.id, language:step.language, type:step.type, seconds:step.seconds, label:step.label};
+        if (['warmup','cooldown'].includes(step.type)) {
+          if (!Array.isArray(step.words) || !step.words.length || step.words.length > 300 ||
+            !step.words.every(word => text(word) && KeyloomCore.supportedToken(word))) fail();
+          row.words = [...step.words];
+        }
+        if (step.type === 'quote') {
+          if (!Number.isInteger(step.quoteId) || step.quoteId < 0) fail();
+          row.quoteId = step.quoteId;
+        }
+        if (step.targets !== undefined) {
+          if (!KeyloomCore.KINDS.includes(step.kind) || !Array.isArray(step.targets) ||
+            step.targets.length > 12 || !step.targets.every(target => KeyloomCore.validTarget(step.kind, target))) fail();
+          row.kind = step.kind;
+          row.targets = [...step.targets];
+        }
+        if (step.result) {
+          const r = step.result;
+          if (!text(r.id) || !number(r.date, 8640000000000000) || !number(r.duration, 86400) ||
+            !number(r.wpm, 1000) || !number(r.accuracy, 100)) fail();
+          row.result = {id:r.id,date:r.date,duration:r.duration,wpm:r.wpm,accuracy:r.accuracy};
+        }
+        return row;
+      });
+      return {id:plan.id,date:plan.date,day:KeyloomAnalytics.day(plan.date),layout:plan.layout,prefs,steps};
+    });
+    const merged = new Map(existing.map(plan => [plan.id, plan]));
+    for (const plan of cleaned) {
+      const local = merged.get(plan.id);
+      if (!local) merged.set(plan.id, plan);
+      else merged.set(plan.id, {...local, steps:local.steps.map(step => {
+        const imported = plan.steps.find(row => row.id === step.id && row.type === step.type &&
+          row.language === step.language && JSON.stringify(row.words) === JSON.stringify(step.words));
+        return !step.result && imported?.result ? {...step,result:imported.result} : step;
+      })});
+    }
+    return [...merged.values()].sort((a,b) => a.date - b.date).slice(-30);
+  }
   function results(daily) {
     if (!daily) return [];
     return ['english', 'russian'].flatMap(language => {
@@ -245,5 +303,5 @@
     return {done:plan.steps.length - remaining.length, total:plan.steps.length,
       minutes:Math.ceil(remaining.reduce((sum, step) => sum + step.seconds, 0) / 60)};
   }
-  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons, results, todaySummary});
+  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons, results, importPlans, todaySummary});
 })();

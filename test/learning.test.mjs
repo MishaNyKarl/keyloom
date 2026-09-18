@@ -104,12 +104,14 @@ test('both repair uses errors and slow words from the preceding test', () => {
   assert.ok(exercise.targets.includes('slowword'));
   assert.equal(exercise.targets.includes('fastword'),false);
   for (const word of ['errorword', 'slowword']) {
-    assert.equal(exercise.words.filter(value => value === word).length, 2);
+    assert.ok(exercise.words.filter(value => value === word).length >= 2);
   }
   const triple = d.exercise(plan,step,[source],l.ingest(null,[source]),['fastword'],()=>.9);
   for (const word of ['errorword', 'slowword']) {
-    assert.equal(triple.words.filter(value => value === word).length, 3);
+    assert.ok(triple.words.filter(value => value === word).length >= 3);
   }
+  assert.equal(exercise.seconds,60);
+  assert.ok(exercise.words.join(' ').length >= 300);
   assert.equal(context.KeyloomAnalytics.validPlan(triple),true);
   assert.equal(context.KeyloomAnalytics.validPlan(exercise),true);
 });
@@ -293,4 +295,18 @@ test('daily results separate languages, preserve partial plans and summarize sav
   assert.equal(empty.medianWpm, null);
   assert.equal(empty.bestWpm, null);
   assert.equal(empty.seconds, 0);
+});
+
+test('daily plans round trip with streak, preferences and deduplicated results', () => {
+  const plan = d.create({minutes:5,languages:'english'}, [], 'default', now, 'backup');
+  for (const step of plan.steps) step.result = {id:step.id,date:now,duration:step.seconds,wpm:60,accuracy:99};
+  const restored = d.importPlans([], JSON.parse(JSON.stringify([plan])));
+  assert.equal(d.progress([], restored, restored[0].prefs, 'default', now).streak, 1);
+  assert.equal(d.comparisons(restored[0]).length, 1);
+  assert.equal(d.importPlans(restored, [plan]).length, 1);
+  assert.equal(d.importPlans(restored, undefined), restored);
+  assert.throws(() => d.importPlans([], [{...plan,steps:[{...plan.steps[0],result:{wpm:-1}}]}]));
+  const partial = structuredClone(plan);
+  delete partial.steps[1].result;
+  assert.equal(d.importPlans([partial], [plan])[0].steps[1].result.id, plan.steps[1].id);
 });

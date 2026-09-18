@@ -222,9 +222,12 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       return { settings: next };
     }
     if (message.type === 'IMPORT') {
+      if (message.layout !== undefined && !['default','alternate'].includes(message.layout)) throw new Error('Некорректная раскладка');
+      const importedPlans = KeyloomDaily.importPlans(dailies, message.dailies);
+      const importedPrefs = message.dailyPrefs === undefined ? dailyPrefs : KeyloomDaily.options(message.dailyPrefs);
       const next = KeyloomCore.mergeSessions(sessions, message.sessions);
       const mergedLearning = message.learning ? KeyloomLearning.merge(learning, message.learning) : learning;
-      await extensionApi.storage.local.set({ sessions: next, learning:KeyloomLearning.ingest(mergedLearning, message.sessions) });
+      await extensionApi.storage.local.set({ sessions: next, settings:{...settings,layout:message.layout ?? settings.layout}, dailies:importedPlans, ...(importedPrefs ? {dailyPrefs:importedPrefs} : {}), learning:KeyloomLearning.ingest(mergedLearning, message.sessions) });
       await scheduleSync();
       return { count: next.length };
     }

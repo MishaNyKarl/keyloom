@@ -368,3 +368,26 @@ for (const firefox of [false, true]) {
     assert.equal(url.searchParams.get('keyloomStep'), plan.steps[0].id);
   });
 }
+
+for (const firefox of [false, true]) {
+  test('import restores daily plans and norm atomically without losing local history: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const page = (firefox ? 'moz' : 'chrome') + '-extension://test-extension/dashboard.html';
+    const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:35,languages:'both'}},page);
+    const backup = JSON.parse(JSON.stringify(plan));
+    backup.id = 'imported-plan';
+    const payload = {type:'IMPORT',sessions:[],dailies:[backup],dailyPrefs:backup.prefs,layout:'alternate'};
+    assert.equal((await h.send(payload,page)).ok,true);
+    assert.equal(h.storage.dailies.length,2);
+    assert.equal(h.storage.dailyPrefs.minutes,35);
+    assert.equal(h.storage.settings.layout,'alternate');
+    assert.equal((await h.send(payload,page)).ok,true);
+    assert.equal(h.storage.dailies.length,2);
+    const before = JSON.stringify(h.storage);
+    assert.equal((await h.send({...payload,dailies:[{id:'bad'}]},page)).ok,false);
+    assert.equal(JSON.stringify(h.storage),before);
+    assert.equal((await h.send({type:'IMPORT',sessions:[]},page)).ok,true);
+    assert.equal(h.storage.dailies.length,2);
+    assert.equal(h.storage.dailyPrefs.minutes,35);
+  });
+}

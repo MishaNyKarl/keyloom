@@ -27,6 +27,12 @@
     if (payload.type === 'GET_STATE') return saved;
     if (payload.type === 'SET_SETTINGS') saved.settings = payload.settings;
     if (payload.type === 'IMPORT') {
+      if (payload.layout !== undefined) {
+        if (!['default','alternate'].includes(payload.layout)) throw new Error('Некорректная раскладка');
+        saved.settings.layout = payload.layout;
+      }
+      saved.dailies = KeyloomDaily.importPlans(saved.dailies ?? [], payload.dailies);
+      if (payload.dailyPrefs !== undefined) saved.dailyPrefs = KeyloomDaily.options(payload.dailyPrefs);
       saved.sessions = core.mergeSessions(saved.sessions, payload.sessions);
       saved.learning = KeyloomLearning.ingest(payload.learning ? KeyloomLearning.merge(saved.learning, payload.learning) : saved.learning, payload.sessions);
     }
@@ -864,7 +870,7 @@
   }
   $('capture-enabled').addEventListener('change', saveSettings); $('layout').addEventListener('change', saveSettings);
   $('export').addEventListener('click', () => {
-    const data = { app: 'keyloom', version: core.VERSION, exportedAt: new Date().toISOString(), sessions: state.sessions, learning:state.learning };
+    const data = { app: 'keyloom', version: core.VERSION, exportedAt: new Date().toISOString(), sessions: state.sessions, learning:state.learning, layout:state.settings.layout, dailies:state.dailies ?? [], dailyPrefs:state.dailyPrefs ?? KeyloomDaily.options() };
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     const link = document.createElement('a'); link.href = url; link.download = `keyloom-${demo ? 'demo-' : ''}${new Date().toISOString().slice(0,10)}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000); toast('Экспорт подготовлен');
@@ -876,9 +882,9 @@
       if (file.size > 8_000_000) throw new Error('Файл больше 8 МБ');
       const text = await file.text();
       const sessions = core.parseBackup(text);
-      const learning = JSON.parse(text).learning;
+      const {learning, dailies, dailyPrefs, layout} = JSON.parse(text);
       if (learning && !KeyloomLearning.validate(learning)) throw new Error('Некорректный персональный словарь');
-      await message({ type: 'IMPORT', sessions, learning }); await load(); toast(`Импортировано сессий: ${sessions.length}`);
+      await message({ type: 'IMPORT', sessions, learning, dailies, dailyPrefs, layout }); dailyInitialized = false; await load(); toast(`Импортировано сессий: ${sessions.length}`);
     } catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
     finally { event.target.value = ''; }
   });
