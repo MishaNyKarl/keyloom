@@ -1,6 +1,6 @@
 # Публикация Keyloom в магазинах
 
-Состояние на 23 сентября 2026: Firefox 0.9.1 одобрен и опубликован. Версия 1.0.0 отправлена в AMO с исходным архивом и примечаниями; статус «Ожидает проверки», ID 6507915. Валидатор: 0 ошибок и предупреждений. Исходный commit: 9adac13 в main. Пройдены 150 тестов и статические проверки исходников и Firefox-пакета. Полное ручное прохождение в установленном Firefox для этого релиза не выполнено.
+Состояние на 23 сентября 2026: Firefox 1.0.0 одобрен и опубликован. Версия 1.0.1 отправлена в AMO с исходным архивом и примечаниями; статус «Ожидает проверки», ID 6507945. Валидатор: 0 ошибок и предупреждений. Исходный commit: 98067b6 в main. Пройдены 155 тестов и статические проверки исходников и Firefox-пакета. Полное ручное прохождение в установленном Firefox для этого релиза не выполнено.
 CI/CD сейчас обновляет личный API; он не публикует расширения в магазинах автоматически.
 
 ## Что подготовить в продукте
@@ -49,8 +49,8 @@ CI/CD сейчас обновляет личный API; он не публику
 PowerShell, после подготовки:
 
 ```powershell
-Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-1.0.0.zip -Force
-Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-1.0.0.zip -Force
+Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-1.0.1.zip -Force
+Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-1.0.1.zip -Force
 ```
 
 В пакет для установки загружается первый ZIP. Второй — в поле исходников для ревью.
