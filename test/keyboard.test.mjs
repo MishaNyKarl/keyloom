@@ -169,3 +169,15 @@ test('command numbers remain stable during search and Enter runs an exact number
   await settle();
   assert.deepEqual(calls, [2, 12]);
 });
+
+test('only an explicitly permitted pending shortcut works while menu is blocked', async () => {
+  let count = 0;
+  const h = harness({canOpen:() => false, commands:[
+    {label:'Next',key:'KeyN',canRunWhenBlocked:() => true,run:() => count++},
+    {label:'Open',key:'KeyO',run:() => count++}
+  ]});
+  assert.equal((await h.key({altKey:true,code:'KeyN'})).prevented, true);
+  assert.equal((await h.key({altKey:true,code:'KeyO'})).prevented, undefined);
+  assert.equal((await h.key({altKey:true,code:'KeyK'})).prevented, undefined);
+  assert.equal(count, 1);
+});

@@ -5,11 +5,11 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
 // Executes the actual content script; only DOM and Chrome transport are simulated.
-async function harness(training=null, firefox=false, daily=null, today=null) {
+async function harness(training=null, firefox=false, daily=null, today=null, deferSave=false) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
-  let storageListener, keyboard;
+  let storageListener, keyboard, resolveSave;
   let observer, first, clock = 0, wordIndex=0, target='street';
   const messages=[];
   const element = () => ({ shown:true, style:{},textContent:'', attributes:new Map(), attributeWrites:0,
@@ -33,7 +33,7 @@ async function harness(training=null, firefox=false, daily=null, today=null) {
     querySelector(selector) { if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':first})[selector] ?? null; },
     querySelectorAll:()=>[mode],
   };
-  const context = vm.createContext({document:doc, location:{pathname:'/'}, crypto:webcrypto, performance:{now:()=>clock+=100},
+  const context = vm.createContext({document:doc, URL, location:{pathname:'/',href:'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=step'}, crypto:webcrypto, performance:{now:()=>clock+=100},
     getComputedStyle:()=>({visibility:'visible'}),requestAnimationFrame:cb=>frames.push(cb),
     MutationObserver:class {constructor(cb){observer=cb;}observe(){}},
     KeyloomKeyboard:{create(options){keyboard=options;return {open(){}};}},
@@ -41,7 +41,7 @@ async function harness(training=null, firefox=false, daily=null, today=null) {
     chrome:{runtime:{async sendMessage(message){
       messages.push(message);
       if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training,today};
-      if(message.type==='SAVE_SESSION'){saves.push(message.session);return {ok:true,saved:true,daily};}
+      if(message.type==='SAVE_SESSION'){saves.push(message.session);if(deferSave)return new Promise(resolve=>{resolveSave=resolve;});return {ok:true,saved:true,daily};}
       return {ok:true};
     }},storage:{onChanged:{addListener(callback){storageListener=callback;}}}},
   });
@@ -53,6 +53,7 @@ async function harness(training=null, firefox=false, daily=null, today=null) {
   const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
   return {get keyboard(){return keyboard;},typing,result,badge,input,saves,type,changed,context,messages,mode,created,
+    resolveSave(reply) { resolveSave(reply); },
     mountFooter() {
       privacy = {nextElementSibling:null, after(node){this.nextElementSibling=node;}};
       return privacy;
@@ -268,4 +269,43 @@ test('typing and caret updates do not rewrite unchanged panel attributes', async
   for (let i = 0; i < 5; i++) await h.changed();
   assert.equal(writes(), before);
   assert.equal(h.keyboard.hidePointer ?? false, false);
+});
+
+for (const firefox of [false, true]) {
+  test('early next intent waits for completion and successful persistence: ' + firefox, async () => {
+    const h = await harness(null, firefox, null, null, true);
+    const next = h.keyboard.commands.find(command => command.key === 'KeyN');
+    h.type('street');
+    assert.equal(next.available(), false);
+    h.typing.shown = false;
+    await h.changed();
+    assert.equal(next.canRunWhenBlocked(), true);
+    await next.run();
+    await next.run();
+    assert.equal(h.messages.some(message => message.type === 'NEXT_DAILY'), false);
+    h.result.shown = true;
+    await h.changed();
+    assert.equal(h.messages.some(message => message.type === 'NEXT_DAILY'), false);
+    h.resolveSave({ok:true, saved:true, dailyStep:'completed', daily:{nextLabel:'Next',completed:false}});
+    await h.changed();
+    assert.equal(h.messages.filter(message => message.type === 'NEXT_DAILY').length, 1);
+  });
+}
+
+test('queued next is discarded on failed, mismatched, final or restarted tests', async () => {
+  for (const scenario of ['failure','mismatch','final','restart','restartWithoutTyping']) {
+    const h = await harness(null, false, null, null, true);
+    h.type('street'); h.typing.shown = false; h.result.shown = true;
+    await h.changed();
+    await h.keyboard.commands.find(command => command.key === 'KeyN').run();
+    if (scenario.startsWith('restart')) {
+      h.result.shown = false; h.typing.shown = true; h.replaceWord(); await h.changed();
+      if (scenario === 'restart') h.type('str');
+    }
+    h.resolveSave(scenario === 'failure' ? {ok:false,error:'offline'} :
+      {ok:true,saved:true,dailyStep:scenario === 'mismatch' ? 'mismatch' : 'completed',
+        daily:{nextLabel:'Next',completed:scenario === 'final'}});
+    await h.changed();
+    assert.equal(h.messages.some(message => message.type === 'NEXT_DAILY'), false, scenario);
+  }
 });

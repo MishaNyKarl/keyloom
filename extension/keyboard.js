@@ -3,6 +3,8 @@
     let dialog, input, list, error, previousFocus, busy = false, pointerTimer;
     let menuCommands = [];
     const ready = () => canOpen() && !document.querySelector('dialog[open]:not(#keyloom-command-menu)');
+    const allowed = command => ready() || (Boolean(command.canRunWhenBlocked?.()) &&
+      !document.querySelector('dialog[open]:not(#keyloom-command-menu)'));
     const available = () => commands.filter(command => !command.available || command.available());
     const stop = event => { event.preventDefault(); event.stopImmediatePropagation(); };
     function render() {
@@ -40,7 +42,7 @@
       return matches.map(entry => entry.command);
     }
     async function run(command) {
-      if (busy || !ready() || (command.available && !command.available())) return;
+      if (busy || !allowed(command) || (command.available && !command.available())) return;
       busy = true;
       try {
         dialog?.close();
@@ -114,12 +116,12 @@
       input.focus();
     }
     document.addEventListener('keydown', event => {
-      if (!event.isTrusted || event.repeat || event.isComposing || !ready()) return;
+      if (!event.isTrusted || event.repeat || event.isComposing) return;
       if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-        if (event.code === 'KeyK') { stop(event); open(); return; }
+        if (event.code === 'KeyK') { if (ready()) { stop(event); open(); } return; }
         const command = available().find(row => row.key === event.code);
-        if (command) { stop(event); void run(command); }
-      } else if (escape && event.key === 'Escape' && !dialog?.open &&
+        if (command && allowed(command)) { stop(event); void run(command); }
+      } else if (ready() && escape && event.key === 'Escape' && !dialog?.open &&
         !document.querySelector('dialog[open]') &&
         !event.target.closest?.('input, textarea, select, [contenteditable="true"]')) {
         stop(event);

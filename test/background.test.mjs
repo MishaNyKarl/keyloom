@@ -486,3 +486,27 @@ test('disconnect during synchronization discards late server response', {timeout
   assert.equal(h.storage.sessions.length, 0);
   assert.equal(h.storage.syncStatus, null);
 });
+
+test('JSON transfer resumes a 15 of 30 plan on its first unfinished step in another browser', async () => {
+  const source = await harness();
+  const destination = await harness(true);
+  const {plan} = await source.send({type:'CREATE_DAILY',options:{goal:'adaptive',minutes:60,languages:'english'}},
+    'chrome-extension://test-extension/dashboard.html');
+  plan.steps = plan.steps.slice(0, 30);
+  for (const [index, step] of plan.steps.entries()) {
+    if (index < 15) step.result = {id:'saved-' + index,date:plan.date,duration:step.seconds,wpm:70,accuracy:98};
+  }
+  plan.steps[15].startedAt = plan.date;
+  plan.steps[15].exerciseId = 'old-browser-exercise';
+  const backup = JSON.parse(JSON.stringify({dailies:[plan],dailyPrefs:plan.prefs,layout:plan.layout,sessions:[]}));
+  const imported = await destination.send({type:'IMPORT',...backup}, 'moz-extension://test-extension/dashboard.html');
+  assert.equal(imported.ok, true);
+  const summary = await destination.send({type:'GET_TODAY_PROGRESS'});
+  assert.equal(summary.today.done, 15);
+  assert.equal(summary.today.total, 30);
+  assert.equal((await destination.send({type:'RESUME_TODAY'})).started, true);
+  const url = new URL(destination.updated.at(-1).url);
+  assert.equal(url.searchParams.get('keyloomDaily'), plan.id);
+  assert.equal(url.searchParams.get('keyloomStep'), plan.steps[15].id);
+  assert.notEqual(destination.storage.dailies.find(row => row.id === plan.id).steps[15].exerciseId, 'old-browser-exercise');
+});

@@ -9,6 +9,7 @@
   let trainingPlan=null,lastSavedId=null,pendingSave=Promise.resolve();
   let dailyState = null, nextButton, panel, widget, theme = 'dark', advancing = false;
   let todayProgress = null, progressPanel;
+  let savingId = null, queuedAdvanceId = null;
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -79,6 +80,21 @@
     if (nextButton.title !== nextTitle) nextButton.title = nextTitle;
 
   }
+  function canQueueAdvance() {
+    const params = new URL(location.href).searchParams;
+    return settings.enabled && !advancing && location.pathname === '/' &&
+      params.has('keyloomDaily') && params.has('keyloomStep') &&
+      !visible(document.querySelector('#typingTest')) && Boolean(session || savingId);
+  }
+  function requestAdvance() {
+    if (canQueueAdvance()) {
+      queuedAdvanceId = session?.id ?? savingId;
+      status = 'Следующее задание откроется после сохранения результата';
+      paint();
+      return;
+    }
+    return advance();
+  }
   async function advance() {
     if (advancing || session || !dailyState || dailyState.completed) return;
     advancing = true;
@@ -104,13 +120,21 @@
     return activeMode?.textContent.trim() ?? selected?.getAttribute('mode') ?? 'unknown';
   }
   function finish(statusValue) {
+    if (statusValue !== 'completed') queuedAdvanceId = null;
     const finished = session;
     session = null;
     if (!finished || finished.events.length < 2) return;
     if(finished.training && (statusValue==='completed' && finished.maxWordIndex!==trainingPlan?.words.length-1)) delete finished.training;
     const result = core.analyze(finished.events, { ...finished, status: statusValue });
     // Persist aggregates only. Raw input and the full test text never leave this content script.
+    savingId = result.id;
+    dailyState = null;
+    status = queuedAdvanceId ? 'Следующее задание откроется после сохранения результата' : 'Сохраняю результат…';
+    paint();
     pendingSave=send({ type: 'SAVE_SESSION', session: result, configuredSeconds:finished.configuredSeconds }).then(reply => {
+      const requested = queuedAdvanceId === result.id;
+      if (savingId === result.id) savingId = null;
+      if (requested) queuedAdvanceId = null;
       if(reply.saved)lastSavedId=result.id;
       dailyState = reply.daily ?? null;
       if (session) return; // A delayed save response must not overwrite a new test's status.
@@ -123,7 +147,12 @@
         }
       }
       paint();
-    }).catch(() => {});
+      if (requested && reply.saved && statusValue === 'completed' &&
+        reply.dailyStep !== 'mismatch' && location.pathname === finished.path) void advance();
+    }).catch(() => {
+      if (savingId === result.id) savingId = null;
+      if (queuedAdvanceId === result.id) queuedAdvanceId = null;
+    });
   }
   function check() {
     checkQueued = false;
@@ -139,12 +168,14 @@
     const readyForNewTest = testVisible && first?.getAttribute('data-wordindex') === '0' &&
       document.querySelector('#wordsInput')?.value === ' ';
     if (first && first !== firstNode && readyForNewTest) {
+      queuedAdvanceId = null;
       if (firstNode) finish('abandoned');
       disabledForTest = false;
       firstNode = first;
       if (!session) status = 'Готов к тесту';
     }
-    if (session && !testVisible) status = 'Ожидаю результаты';
+    if (session && !testVisible) status = queuedAdvanceId ?
+      'Следующее задание откроется после сохранения результата' : 'Ожидаю результаты';
     paint();
   }
   function queueCheck() {
@@ -178,6 +209,7 @@
       if (!['time', 'words', 'custom', 'quote'].includes(testMode)) { status = 'Режим не поддерживается'; paint(); return; }
       // Never collect a partial session when enabled or installed midway through a test.
       if (node.getAttribute('data-wordindex') !== '0' || value !== ' ' || deleting) { status = 'Начните новый тест'; paint(); return; }
+      queuedAdvanceId = null;
       session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, configuredSeconds:configuration.configuredSeconds, language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
         layout: settings.layout, mode: testMode, events: [] };
       if(trainingPlan && testMode==='custom' && trainingPlan.layout===settings.layout && trainingPlan.language===session.language)session.training={id:trainingPlan.id,kind:trainingPlan.kind,targets:trainingPlan.targets,seconds:trainingPlan.seconds,...(trainingPlan.wordCount ? {wordCount:trainingPlan.wordCount} : {})};
@@ -219,8 +251,9 @@
           run:() => pendingSave.then(() => send({type:'START_WARMUP',
             language:KeyloomConfiguration.read(document).language ?? trainingPlan?.language ?? 'english'}))},
         {label:'Следующее задание', alias:'next daily lesson', key:'KeyN',
-          available:() => settings.enabled && Boolean(dailyState) && !dailyState.completed && !advancing,
-          run:advance},
+          available:() => canQueueAdvance() || (settings.enabled && Boolean(dailyState) && !dailyState.completed && !advancing),
+          canRunWhenBlocked:canQueueAdvance,
+          run:requestAdvance},
         {label:'Открыть Keyloom', alias:'dashboard overview', key:'KeyO',
           run:() => pendingSave.then(() => send({type:'OPEN_DASHBOARD',sessionId:lastSavedId}))},
         {get label() {
@@ -262,6 +295,7 @@
     if (changes.dailies || changes.settings) void refreshProgress();
     if (changes.theme) { theme = changes.theme.newValue; paint(); }
     if (!changes.settings) return;
+    queuedAdvanceId = null;
     settings = changes.settings.newValue;
     session = null; status = settings.enabled ? 'Начните новый тест' : 'На паузе'; paint();
   });
