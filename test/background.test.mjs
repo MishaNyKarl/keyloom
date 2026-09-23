@@ -443,3 +443,46 @@ for (const firefox of [false, true]) {
     assert.ok(h.storage.dailies.some(row => row.id === plan.id));
   });
 }
+
+for (const firefox of [false, true]) {
+  test('slow server does not block local saves and merges concurrent results: ' + firefox, {timeout:2000}, async () => {
+    const h = await harness(firefox);
+    const page = (firefox ? 'moz' : 'chrome') + '-extension://test-extension/dashboard.html';
+    h.storage.syncConfig = {enabled:true, url:'https://192.0.2.1:8443',
+      token:'synthetic-token-with-at-least-32-characters'};
+    let release, notify;
+    const started = new Promise(resolve => { notify = resolve; });
+    h.context.fetch = () => { notify(); return new Promise(resolve => { release = resolve; }); };
+    const syncing = h.send({type:'SYNC_NOW'}, page);
+    await started;
+    try {
+      const saved = await h.send({type:'SAVE_SESSION', session:h.session('during-sync')});
+      assert.equal(saved.saved, true);
+      assert.equal(h.storage.sessions[0].id, 'during-sync');
+    } finally {
+      release(Response.json({version:1, total:1, sessions:[h.session('remote')]}));
+    }
+    assert.equal((await syncing).synchronized, true);
+    assert.deepEqual(h.storage.sessions.map(row => row.id).sort(), ['during-sync','remote']);
+  });
+}
+
+test('disconnect during synchronization discards late server response', {timeout:2000}, async () => {
+  const h = await harness();
+  const page = 'chrome-extension://test-extension/dashboard.html';
+  h.storage.syncConfig = {enabled:true, url:'https://192.0.2.1:8443',
+    token:'synthetic-token-with-at-least-32-characters'};
+  let release, notify;
+  const started = new Promise(resolve => { notify = resolve; });
+  h.context.fetch = () => { notify(); return new Promise(resolve => { release = resolve; }); };
+  const syncing = h.send({type:'SYNC_NOW'}, page);
+  await started;
+  try {
+    assert.equal((await h.send({type:'DISCONNECT_SYNC'}, page)).disconnected, true);
+  } finally {
+    release(Response.json({version:1, total:1, sessions:[h.session('remote')]}));
+  }
+  assert.equal((await syncing).errorCode, 'CONFIG_CHANGED');
+  assert.equal(h.storage.sessions.length, 0);
+  assert.equal(h.storage.syncStatus, null);
+});

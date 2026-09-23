@@ -20,24 +20,46 @@ function syncPermissions(config) {
     ...(extensionApi.runtime.getManifest?.().browser_specific_settings?.gecko
       ? { data_collection: ['websiteActivity', 'authenticationInfo'] } : {}) };
 }
-async function synchronize() {
-  const { syncConfig, sessions = [], learning } = await extensionApi.storage.local.get(['syncConfig', 'sessions', 'learning']);
+let syncInFlight;
+function enqueue(operation) {
+  queue = queue.catch(() => {}).then(operation);
+  return queue;
+}
+function synchronize() {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = exchangeInBackground().finally(() => { syncInFlight = null; });
+  return syncInFlight;
+}
+async function exchangeInBackground() {
+  const { syncConfig, sessions = [] } = await extensionApi.storage.local.get(['syncConfig', 'sessions']);
   if (!syncConfig?.enabled) return { synchronized: false, errorCode: 'SYNC_DISABLED' };
+  const sameConfig = current => current?.enabled && current.url === syncConfig.url &&
+    current.token === syncConfig.token;
   try {
     if (!await extensionApi.permissions.contains(syncPermissions(syncConfig))) {
       throw Object.assign(new Error('Sync permission revoked'), { code: 'PERMISSION_DENIED' });
     }
+    // Network latency must not hold the local save/next-step queue.
     const result = await KeyloomSync.exchange(syncConfig, sessions);
-    await extensionApi.storage.local.set({ sessions: result.sessions,
-      learning: KeyloomLearning.ingest(learning, result.sessions),
-      syncStatus: { date: Date.now(), total: result.total, error: null } });
-    return { synchronized: true };
+    return await enqueue(async () => {
+      const current = await extensionApi.storage.local.get(['syncConfig', 'sessions', 'learning']);
+      if (!sameConfig(current.syncConfig)) return {synchronized:false, errorCode:'CONFIG_CHANGED'};
+      const merged = KeyloomCore.mergeSessions(current.sessions ?? [], result.sessions);
+      await extensionApi.storage.local.set({sessions:merged,
+        learning:KeyloomLearning.ingest(current.learning, merged),
+        syncStatus:{date:Date.now(), total:result.total, error:null}});
+      return {synchronized:true};
+    });
   } catch (error) {
-    const { syncStatus = {} } = await extensionApi.storage.local.get('syncStatus');
-    await extensionApi.storage.local.set({ syncStatus: { ...syncStatus,
-      error: 'Не удалось синхронизировать. Проверьте соединение и ключ; повторим автоматически.',
-      errorCode: error.code ?? 'NETWORK_ERROR' } });
-    return { synchronized: false, errorCode: error.code ?? 'NETWORK_ERROR' };
+    return await enqueue(async () => {
+      const {syncConfig:current, syncStatus = {}} = await extensionApi.storage.local.get(['syncConfig', 'syncStatus']);
+      if (sameConfig(current)) {
+        await extensionApi.storage.local.set({syncStatus:{...syncStatus,
+          error:'Не удалось синхронизировать. Проверьте соединение и ключ; повторим автоматически.',
+          errorCode:error.code ?? 'NETWORK_ERROR'}});
+      }
+      return {synchronized:false, errorCode:error.code ?? 'NETWORK_ERROR'};
+    });
   }
 }
 function scheduleSync() {
@@ -45,12 +67,17 @@ function scheduleSync() {
 }
 extensionApi.alarms?.create('keyloom-sync', { periodInMinutes: 5 });
 extensionApi.alarms?.onAlarm.addListener(alarm => {
-  if (alarm.name.startsWith('keyloom-sync')) queue = queue.catch(() => {}).then(synchronize);
+  if (alarm.name.startsWith('keyloom-sync')) void synchronize().catch(() => {});
 });
 extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
   const fromExtension = sender.id === extensionApi.runtime.id && sender.url?.startsWith(extensionApi.runtime.getURL(''));
   const fromMonkeytype = sender.id === extensionApi.runtime.id && sender.url?.startsWith('https://monkeytype.com/');
   if (!fromExtension && !fromMonkeytype) return;
+  if (fromExtension && message.type === 'SYNC_NOW') {
+    synchronize().then(data => respond({ok:true, ...data}),
+      error => respond({ok:false, error:error.message, code:error.code}));
+    return true;
+  }
   queue = queue.catch(() => {}).then(async () => {
     const { sessions = [], settings = defaults, exercises = [], learning: savedLearning,
       dailies: savedDailies = [], dailyPrefs, theme } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs', 'theme']);
@@ -216,9 +243,6 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === 'DISCONNECT_SYNC') {
       await extensionApi.storage.local.set({ syncConfig: null, syncStatus: null });
       return { disconnected: true };
-    }
-    if (message.type === 'SYNC_NOW') {
-      return await synchronize();
     }
     if(message.type==='START_PRACTICE'){
       if(!settings.enabled)throw new Error('Включите запись тестов перед тренировкой');
