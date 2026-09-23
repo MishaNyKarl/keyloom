@@ -310,3 +310,44 @@ test('daily plans round trip with streak, preferences and deduplicated results',
   delete partial.steps[1].result;
   assert.equal(d.importPlans([partial], [plan])[0].steps[1].result.id, plan.steps[1].id);
 });
+
+
+test('legacy thirty-second both steps still produce one minute of targeted text', () => {
+  const source = session('legacy-source', {wpm:90, words:{cat:metric(1)}});
+  const plan = d.create({languages:'english'}, [source], 'default', now, 'legacy-both');
+  plan.steps[0].result = {id:source.id};
+  const step = plan.steps.find(row => row.type === 'repair');
+  step.seconds = 30;
+  const exercise = d.exercise(plan, step, [source], l.ingest(null, [source]), ['cat'], () => .2);
+  assert.equal(exercise.seconds, 60);
+  assert.ok(exercise.words.join(' ').length >= 450);
+  assert.ok(exercise.words.every(word => word === 'cat'));
+  assert.equal(context.KeyloomAnalytics.validPlan(exercise), true);
+});
+
+test('backup restores multiple dates and streak without sessions, but a missed day breaks it', () => {
+  const plans = Array.from({length:7}, (_, index) => {
+    const date = now - index * DAY;
+    const plan = d.create({minutes:5,languages:'both'}, [], 'default', date, 'backup-' + index);
+    for (const step of plan.steps) {
+      step.result = {id:step.id, date, duration:step.seconds, wpm:60, accuracy:98};
+    }
+    return plan;
+  });
+  const restored = d.importPlans([], JSON.parse(JSON.stringify(plans)));
+  assert.equal(restored.length, 7);
+  assert.equal(d.progress([], restored, restored[0].prefs, 'default', now).streak, 7);
+  assert.equal(d.progress([], restored, restored[0].prefs, 'default', now + 2 * DAY).streak, 0);
+});
+
+test('focus kind survives backup and controls the generated exercise', () => {
+  const plan = d.create({languages:'english',kind:'words'}, [], 'default', now, 'focus-kind');
+  const step = plan.steps.find(row => row.type === 'focus');
+  step.kind = 'pairs';
+  const restored = d.importPlans([], JSON.parse(JSON.stringify([plan])))[0];
+  const restoredStep = restored.steps.find(row => row.id === step.id);
+  assert.equal(restoredStep.kind, 'pairs');
+  const exercise = d.exercise(restored, restoredStep, [session('focus-source')], null, ['thimble'], () => .2);
+  assert.equal(exercise.kind, 'pairs');
+  assert.equal(context.KeyloomAnalytics.validPlan(exercise), true);
+});

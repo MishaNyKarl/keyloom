@@ -24,7 +24,12 @@
     try { saved = JSON.parse(localStorage.getItem(previewKey) ?? 'null'); } catch { /* recover a broken preview store */ }
     saved ??= { sessions: [], settings: { enabled: true, layout: 'default' } };
     saved.learning = KeyloomLearning.ingest(saved.learning, saved.sessions);
-    if (payload.type === 'GET_STATE') return saved;
+    if (payload.type === 'GET_STATE') {
+      saved.dailies = KeyloomDaily.schedule(saved.dailies ?? [], saved.dailyPrefs,
+        saved.sessions, saved.settings.layout);
+      localStorage.setItem(previewKey, JSON.stringify(saved));
+      return saved;
+    }
     if (payload.type === 'SET_SETTINGS') saved.settings = payload.settings;
     if (payload.type === 'IMPORT') {
       if (payload.layout !== undefined) {
@@ -38,7 +43,8 @@
     }
     if (payload.type === 'CREATE_DAILY') {
       const plan = KeyloomDaily.create(payload.options, saved.sessions, saved.settings.layout);
-      saved.dailies = [...(saved.dailies ?? []), plan].slice(-30);
+      saved.dailies = KeyloomDaily.schedule([...(saved.dailies ?? []), plan].slice(-30),
+        plan.prefs, saved.sessions, saved.settings.layout, Date.now(), true);
       saved.dailyPrefs = plan.prefs;
     }
     localStorage.setItem(previewKey, JSON.stringify(saved));
@@ -212,11 +218,12 @@
     addLegend('мало данных', null);
     const percent = value => (value * 100).toLocaleString('ru-RU', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
     for (const bin of scale.bins) {
-      const label = scale.min === scale.max ? percent(bin.min) + ' у всех' :
-        percent(bin.min) + (bin.level === 3 ? '–' : '–<') + percent(bin.max);
+      let label = percent(bin.min) + (bin.level === 3 ? '–' : '–<') + percent(bin.max);
+      if (scale.min === scale.max) label = percent(bin.min) + ' у всех';
+      else if (bin.level === 3 && scale.clipped) label = 'от ' + percent(bin.min);
       addLegend(label, bin.level);
     }
-    legend.title = 'Относительная шкала ошибок среди показанных букв с 5 и более попытками';
+    legend.title = 'Шкала по буквам с ≥5 попытками. Выбросы выше Q3 + 1,5 × IQR получают последний цвет; проценты в подсказке не изменяются.';
     $('keyboard').replaceChildren(...keys.map(text => {
       const row = document.createElement('div'); row.className = 'key-row';
       for (const letter of text) {
@@ -224,7 +231,7 @@
         const level = levels.get(letter);
         key.dataset.level = String(level ?? 0);
         if (level === null) key.classList.add('no-data');
-        key.title = data ? `${letter}: ${data.errors} ошибок / ${data.attempts} первых попыток${data.attempts < 5 ? ' · мало данных' : ''}` : `${letter}: нет данных`;
+        key.title = data ? `${letter}: ${data.errors} ошибок / ${data.attempts} первых попыток · ${percent(data.errorRate)}${data.attempts < 5 ? ' · мало данных' : ''}` : `${letter}: нет данных`;
         key.setAttribute('aria-label', key.title); row.append(key);
       }
       return row;
@@ -421,13 +428,20 @@
       ...KeyloomLearning.vocabulary(state.learning, $('language').value, state.settings.layout)];
   }
   function setDailyFields(prefs) {
+    $('daily-template').value = prefs.goal === 'balanced' ? 'routine' : prefs.goal;
     for (const key of ['goal','minutes','languages','kind','rounds','seconds','targets']) {
       $('daily-' + key).value = String(prefs[key]);
     }
     for (const key of ['repair','quote','repeat','numbers','punctuation']) {
       $('daily-' + key).checked = prefs[key];
     }
+    updateDailyControls();
   }
+  function updateDailyControls() {
+    const adaptive = $('daily-goal').value === 'adaptive';
+    for (const key of ['rounds', 'seconds']) $('daily-' + key).disabled = adaptive;
+  }
+  $('daily-goal').addEventListener('change', updateDailyControls);
   function dailyOptions() {
     const prefs = {};
     for (const key of ['goal','languages','kind','targets']) prefs[key] = $('daily-' + key).value;
@@ -436,7 +450,8 @@
     return KeyloomDaily.options(prefs);
   }
   function activeDaily() {
-    return (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout).at(-1);
+    return (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout &&
+      plan.day === analytics.day(Date.now())).at(-1);
   }
   function renderPlanSteps(list, plan) {
     list.replaceChildren();
@@ -512,7 +527,8 @@
   }
   function renderDailyHistory() {
     const select = $('daily-history-date');
-    const selected = select.value || query.get('dailyResult');
+    const selected = query.get('dailyResult') || select.value || activeDaily()?.id;
+    if (query.has('dailyResult')) $('daily-archive').open = true;
     query.delete('dailyResult');
     const plans = (state.dailies ?? []).filter(plan => plan.layout === state.settings.layout)
       .slice().sort((a, b) => b.date - a.date);
@@ -568,6 +584,16 @@
     } else {
       $('daily-status').textContent = 'Выбери цель и время, затем составь план. Список шагов появится здесь до запуска тестов.';
     }
+    const tomorrow = (state.dailies ?? []).find(plan => plan.layout === state.settings.layout &&
+      plan.day === today + 1);
+    $('daily-next-day').textContent = tomorrow ? 'Завтра: план готов · ' + tomorrow.prefs.minutes +
+      ' мин. После завершения сегодняшнего занятия он обновится по новым результатам.' :
+      'Сохрани программу один раз — планы на сегодня и завтра будут появляться автоматически.';
+    let currentLabel = daily ? 'Сегодня всё выполнено. Результаты — в истории ниже.' :
+      'Выбери программу, время и языки.';
+    if (next) currentLabel = (next.language === 'russian' ? 'RU' : 'EN') + ' · ' + next.label;
+    $('daily-current').textContent = currentLabel;
+    $('daily-config').open = !daily;
     $('daily-start').hidden = !next;
     $('daily-start').disabled = !installed || demo;
     $('daily-start').textContent = next?.startedAt ? 'Повторно открыть текущий шаг →' : 'Начать следующий шаг →';
@@ -655,7 +681,10 @@
   $('daily-history-date').addEventListener('change', renderDailyHistory);
   $('daily-template').addEventListener('change', () => {
     const template = $('daily-template').value;
-    const prefs = KeyloomDaily.options();
+    const prefs = KeyloomDaily.options({minutes:Number($('daily-minutes').value),
+      languages:$('daily-languages').value});
+    if (template === 'adaptive') Object.assign(prefs, {goal:'adaptive', kind:'auto'});
+    if (template === 'routine') Object.assign(prefs, {goal:'balanced', kind:'auto'});
     if (template === 'speed') Object.assign(prefs, {goal:'speed', seconds:30, quote:false, rounds:5});
     if (template === 'accuracy') Object.assign(prefs, {goal:'accuracy', quote:false, kind:'words'});
     if (template === 'text') Object.assign(prefs, {goal:'text', kind:'punctuation', punctuation:true});
@@ -669,15 +698,20 @@
       $('daily-history-date').value = '';
       if (demo) {
         const plan = KeyloomDaily.create(options, state.sessions, state.settings.layout);
-        state.dailies = [...(state.dailies ?? []), plan].slice(-30);
+        state.dailies = KeyloomDaily.schedule([...(state.dailies ?? []), plan].slice(-30),
+          plan.prefs, state.sessions, state.settings.layout, Date.now(), true);
+        state.dailyPrefs = plan.prefs;
         renderDaily();
       } else {
         await message({type:'CREATE_DAILY', options});
         await load();
       }
-      document.querySelector('.daily-route').open = true;
+      $('daily-config').open = false;
       toast('Новый план составлен. Можно начать первое задание.');
-    } catch (error) { $('daily-error').textContent = error.message; }
+    } catch (error) {
+      $('daily-error').textContent = error.message;
+      toast(error.message);
+    }
   });
   $('daily-start').addEventListener('click', async () => {
     $('daily-start').disabled = true;
@@ -884,7 +918,11 @@
       const sessions = core.parseBackup(text);
       const {learning, dailies, dailyPrefs, layout} = JSON.parse(text);
       if (learning && !KeyloomLearning.validate(learning)) throw new Error('Некорректный персональный словарь');
-      await message({ type: 'IMPORT', sessions, learning, dailies, dailyPrefs, layout }); dailyInitialized = false; await load(); toast(`Импортировано сессий: ${sessions.length}`);
+      await message({ type: 'IMPORT', sessions, learning, dailies, dailyPrefs, layout });
+      dailyInitialized = false;
+      await load();
+      toast(`Импорт завершён: ${sessions.length} сессий, ${dailies?.length ?? 0} планов в файле.` +
+        (dailies === undefined ? ' Старый экспорт не содержит планов.' : ''));
     } catch (error) { toast(error.message); KeyloomDiagnostics.report('dashboard', error); }
     finally { event.target.value = ''; }
   });

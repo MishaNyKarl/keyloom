@@ -27,7 +27,7 @@
       numbers: false, punctuation: false, targets: '', ...input };
     if (![5,10,15,20,25,30,35,45,60].includes(result.minutes) ||
       !['english','russian','both'].includes(result.languages) ||
-      !['balanced','speed','accuracy','text'].includes(result.goal) ||
+      !['balanced','speed','accuracy','text','adaptive'].includes(result.goal) ||
       !['auto','pairs','sequences','words','uppercase','digits','punctuation'].includes(result.kind) ||
       !Number.isInteger(result.rounds) || result.rounds < 1 || result.rounds > 5 ||
       ![30,60,120].includes(result.seconds) ||
@@ -54,6 +54,7 @@
     repair:true,quote:true,repeat:true,numbers:false,punctuation:false,targets:'' };
   function create(input, sessions, layout, now = Date.now(), id = crypto.randomUUID()) {
     const prefs = options(input);
+    if (prefs.goal === 'adaptive') return createAdaptive(prefs, sessions, layout, now, id);
     const languages = prefs.languages === 'both' ? ['english','russian'] : [prefs.languages];
     const steps = [];
     for (const language of languages) {
@@ -95,6 +96,85 @@
     }
     return {id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps};
   }
+  function createAdaptive(prefs, sessions, layout, now, id) {
+    const languages = prefs.languages === 'both' ? ['english', 'russian'] : [prefs.languages];
+    const steps = [];
+    for (const language of languages) {
+      const profile = KeyloomCore.profile(sessions, {language, layout});
+      const controls = profile.sessions.filter(row => row.mode === 'time' && row.duration >= 45)
+        .sort((a, b) => a.date - b.date).slice(-20);
+      const speed = KeyloomCore.median(controls.map(row => row.wpm)) || profile.wpm || 40;
+      const cleanSpeed = Math.round(speed * .92);
+      const burstSpeed = Math.round(speed * 1.1);
+      let budget = prefs.minutes * 60 / languages.length - 60;
+      const add = (type, seconds, label, extra = {}) => {
+        steps.push({id:id + '-' + steps.length, language, type, seconds, label, ...extra});
+      };
+      const use = (type, seconds, label, extra = {}) => {
+        add(type, seconds, label, extra);
+        budget -= seconds;
+      };
+      const words = warmupWords(language, speed);
+      add('warmup', 30, 'Разминка · спокойно и точно', {words});
+      const burst = () => use('time', 15, 'Разгон · ориентир ' + burstSpeed + ' WPM, без напряжения');
+      burst();
+      if (budget >= 225) burst();
+      use('time', budget >= 210 ? 60 : 30,
+        'Чистый ритм · около ' + cleanSpeed + ' WPM, цель ≥98,5%');
+      if (budget >= 150) {
+        use('focus', 30, 'Слабые пары в словах', {kind:'pairs'});
+        use('focus', 30, 'Слабые связки в словах', {kind:'sequences'});
+        const special = ['uppercase', 'digits', 'punctuation'].includes(prefs.kind);
+        use('focus', 30, special ? 'Выбранная категория · свои цели' : 'Ошибочные и медленные слова',
+          {kind:special ? prefs.kind : 'words'});
+        use('time', budget >= 180 ? 120 : 60, 'Выносливость · ровный темп до конца');
+      } else {
+        const kinds = ['pairs', 'sequences', 'words'];
+        const kind = prefs.kind !== 'auto' ? prefs.kind : kinds.reduce((best, value) =>
+          (profile[value][0]?.score ?? 0) > (profile[best][0]?.score ?? 0) ? value : best, 'words');
+        use('focus', 30, 'Главное слабое место · короткий прицельный блок', {kind});
+      }
+      if (prefs.repair && budget >= 60) use('repair', 60, 'Ошибочные + медленные слова · both');
+      const quote = quotes[language][Math.abs(Math.floor(now / 86400000)) % quotes[language].length];
+      const quoteSeconds = Math.max(30, Math.ceil(quote[1] / (speed * 5) * 2) * 30);
+      if (prefs.quote && budget >= quoteSeconds) {
+        use('quote', quoteSeconds, 'Перенос навыка · цитата', {quoteId:quote[0]});
+      }
+      if (prefs.repeat && budget >= 30) use('review', 30, 'Повторение по расписанию');
+      let round = 0;
+      while (budget >= 15) {
+        if (round % 4 === 0 || budget < 30) {
+          const repeats = Math.min(4, Math.floor(budget / 15));
+          for (let count = 0; count < repeats; count++) burst();
+        }
+        else if (round % 4 === 1) use('time', Math.min(60, budget), 'Чистый ритм · цель ≥98,5%');
+        else if (round % 4 === 2) use('focus', budget >= 60 ? 60 : 30, 'Закрепление слабых слов', {kind:'words'});
+        else use('time', Math.min(120, budget), 'Выносливость · ровный темп');
+        round++;
+      }
+      add('cooldown', 30, 'Повтор текста · сравнение с разминкой', {words:[...words]});
+    }
+    return {id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps};
+  }
+  // Prepare only the current local calendar day and the next one; never replace started work.
+  function schedule(plans, prefs, sessions, layout, now = Date.now(), refreshTomorrow = false,
+    makeId = () => crypto.randomUUID()) {
+    if (!prefs) return plans;
+    const next = new Date(now);
+    next.setDate(next.getDate() + 1);
+    const dates = [now, next.getTime()];
+    let result = plans;
+    for (const [index, date] of dates.entries()) {
+      const day = KeyloomAnalytics.day(date);
+      const found = result.filter(plan => plan.day === day && plan.layout === layout).at(-1);
+      const untouched = found && found.steps.every(step => !step.result && !step.startedAt);
+      if (!found || (index === 1 && refreshTomorrow && untouched)) {
+        const plan = create(prefs, sessions, layout, date, makeId());
+        result = [...result.filter(row => row !== found), plan];
+      }
+    }
+    return result === plans ? plans : result.sort((a, b) => a.date - b.date).slice(-30);
+  }
   function exercise(daily, step, sessions, learning, dictionary, random = Math.random) {
     if (['warmup','cooldown'].includes(step.type)) {
       return {id:crypto.randomUUID(), date:Date.now(), language:step.language,
@@ -104,9 +184,11 @@
     const prefs = daily.prefs;
     const scope = {language:step.language, layout:daily.layout};
     const profile = KeyloomCore.profile(sessions, scope);
-    let kind = prefs.kind === 'auto' ? 'pairs' : prefs.kind;
+    let kind = step.type === 'focus' && KeyloomCore.KINDS.includes(step.kind) ?
+      step.kind : (prefs.kind === 'auto' ? 'pairs' : prefs.kind);
     const alphabet = step.language === 'russian' ? /^[а-яё]+$/iu : /^[a-z]+$/iu;
-    let targets = prefs.targets.trim().split(/\s+/u).filter(target => target &&
+    const manualTargets = step.type === 'focus' && step.kind && step.kind !== prefs.kind ? '' : prefs.targets;
+    let targets = manualTargets.trim().split(/\s+/u).filter(target => target &&
       (['digits','punctuation'].includes(kind) || alphabet.test(target)));
     if (step.type === 'review') {
       const due = KeyloomLearning.due(learning, step.language, daily.layout);
@@ -247,8 +329,12 @@
           if (!Number.isInteger(step.quoteId) || step.quoteId < 0) fail();
           row.quoteId = step.quoteId;
         }
+        if (step.kind !== undefined) {
+          if (!KeyloomCore.KINDS.includes(step.kind)) fail();
+          row.kind = step.kind;
+        }
         if (step.targets !== undefined) {
-          if (!KeyloomCore.KINDS.includes(step.kind) || !Array.isArray(step.targets) ||
+          if (!row.kind || !Array.isArray(step.targets) ||
             step.targets.length > 12 || !step.targets.every(target => KeyloomCore.validTarget(step.kind, target))) fail();
           row.kind = step.kind;
           row.targets = [...step.targets];
@@ -303,5 +389,5 @@
     return {done:plan.steps.length - remaining.length, total:plan.steps.length,
       minutes:Math.ceil(remaining.reduce((sum, step) => sum + step.seconds, 0) / 60)};
   }
-  globalThis.KeyloomDaily = Object.freeze({options, create, exercise, nativeUrl, complete, progress, comparisons, results, importPlans, todaySummary});
+  globalThis.KeyloomDaily = Object.freeze({options, create, schedule, exercise, nativeUrl, complete, progress, comparisons, results, importPlans, todaySummary});
 })();

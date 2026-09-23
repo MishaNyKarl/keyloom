@@ -53,7 +53,12 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
   if (!fromExtension && !fromMonkeytype) return;
   queue = queue.catch(() => {}).then(async () => {
     const { sessions = [], settings = defaults, exercises = [], learning: savedLearning,
-      dailies = [], dailyPrefs, theme } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs', 'theme']);
+      dailies: savedDailies = [], dailyPrefs, theme } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs', 'theme']);
+    let dailies = savedDailies;
+    if (['GET_STATE', 'GET_TODAY_PROGRESS', 'RESUME_TODAY'].includes(message.type)) {
+      dailies = KeyloomDaily.schedule(dailies, dailyPrefs, sessions, settings.layout);
+      if (dailies !== savedDailies) await extensionApi.storage.local.set({dailies});
+    }
     const learning = savedLearning ?? KeyloomLearning.ingest(null, sessions);
     if (!savedLearning) await extensionApi.storage.local.set({learning});
     if (message.type === 'START_WARMUP') {
@@ -96,7 +101,13 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
       const accepted = next.find(row => row.id === incoming.id);
-      const updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, sender.url, message.configuredSeconds) : dailies;
+      let updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, sender.url, message.configuredSeconds) : dailies;
+      const newlyCompleted = updatedDailies.some(plan => plan.steps.every(step => step.result) &&
+        dailies.find(previous => previous.id === plan.id)?.steps.some(step => !step.result));
+      if (newlyCompleted) {
+        updatedDailies = KeyloomDaily.schedule(updatedDailies, dailyPrefs, next, settings.layout,
+          Date.now(), true);
+      }
       await extensionApi.storage.local.set({ sessions: next,
         learning: KeyloomLearning.ingest(learning, [incoming]),
         dailies: updatedDailies });
@@ -148,7 +159,9 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
           KeyloomDaily.exercise(plan, step, sessions, learning, KeyloomWords[step.language]);
         }
       }
-      await extensionApi.storage.local.set({dailies:[...dailies, plan].slice(-30), dailyPrefs:plan.prefs});
+      const prepared = KeyloomDaily.schedule([...dailies, plan].slice(-30), plan.prefs,
+        sessions, settings.layout, Date.now(), true);
+      await extensionApi.storage.local.set({dailies:prepared, dailyPrefs:plan.prefs});
       return {plan};
     }
     if (message.type === 'START_DAILY' || continuing || resuming) {

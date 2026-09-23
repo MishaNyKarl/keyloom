@@ -233,3 +233,22 @@ html.keyloom-pointer-idle, html.keyloom-pointer-idle * { cursor: none !important
   .daily-result-card { padding: 16px 12px; }
   .daily-result-comparison { font-size: .7em; gap: 14px 5px; }
 }
+
+/* Keep the next action visible before optional planning and analysis. */
+.daily-launch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.daily-launch h2 { margin: 0; }
+.daily-launch p { margin: .5rem 0 0; }
+.daily-launch #daily-next-day { flex-basis: 100%; }
+#daily-config summary, #daily-archive summary { cursor: pointer; }
+#daily-config form { margin-top: 1rem; }
+#daily .stats-grid { margin: 1rem 0; }
+#daily .stat-value { font-size: 2rem; }
+@media (max-width: 600px) {
+  .daily-launch { align-items: stretch; flex-direction: column; }
+}

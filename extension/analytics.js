@@ -140,14 +140,24 @@
     const rates = valid.filter(value => value !== null);
     if (!rates.length) return {min:null, max:null, levels:valid, bins:[]};
     const min = Math.min(...rates);
-    const max = Math.max(...rates);
+    const actualMax = Math.max(...rates);
+    const sorted = [...rates].sort((a, b) => a - b);
+    // Tukey's upper fence limits isolated outliers without changing the raw percentages.
+    const percentile = fraction => {
+      const index = (sorted.length - 1) * fraction;
+      const lower = Math.floor(index);
+      return sorted[lower] + (sorted[Math.ceil(index)] - sorted[lower]) * (index - lower);
+    };
+    const q1 = percentile(.25), q3 = percentile(.75);
+    const fence = q3 + 1.5 * (q3 - q1);
+    const max = rates.length >= 8 && fence > min ? Math.min(actualMax, fence) : actualMax;
     const span = max - min;
     const levels = valid.map(value => value === null ? null : span === 0 ? 0 :
       Math.min(3, Math.floor((value - min) / span * 4)));
     const bins = span === 0 ? [{level:0, min, max}] : Array.from({length:4}, (_, level) => ({
       level, min:min + span * level / 4, max:min + span * (level + 1) / 4
     }));
-    return {min, max, levels, bins};
+    return {min, max, actualMax, clipped:actualMax > max, levels, bins};
   }
   globalThis.KeyloomAnalytics=Object.freeze({mean,day,summary,plan,validPlan,chartScale,keyboardScale,warmup});
 })();

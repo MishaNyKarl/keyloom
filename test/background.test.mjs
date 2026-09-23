@@ -228,18 +228,31 @@ for (const firefox of [false, true]) {
   });
 }
 
-for (const languages of ['english', 'both']) {
-  test('full daily route saves comparisons and opens Keyloom once: ' + languages, async () => {
+for (const [languages, goal] of [['english','balanced'], ['both','balanced'],
+  ['english','adaptive'], ['both','adaptive']]) {
+  test('full daily route saves comparisons and opens Keyloom once: ' + languages + ' ' + goal, async () => {
     const h = await harness();
     const page = h.context.chrome.runtime.getURL('dashboard.html');
-    const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:5,languages,
+    const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:goal === 'adaptive' ? 10 : 5,languages,goal,
       repeat:false,repair:true,quote:false}},page);
+    if (goal === 'adaptive') {
+      assert.ok(plan.steps.some(step => step.type === 'time' && step.seconds === 15));
+      assert.deepEqual([...new Set(plan.steps.filter(step => step.type === 'focus').map(step => step.kind))].sort(),
+        ['pairs','sequences','words']);
+    }
+    const tomorrow = structuredClone(h.storage.dailies.find(row => row.day === plan.day + 1));
     await h.send({type:'START_DAILY',id:plan.id},page);
     let url = h.opened.at(-1);
     const firstWords = {};
     for (let index=0; index<plan.steps.length; index++) {
       const step = h.storage.dailies[0].steps[index];
       const state = await h.send({type:'GET_STATE'},url);
+      if (step.type === 'focus') assert.equal(state.training.kind, plan.steps[index].kind);
+      if (step.type === 'time') {
+        const encoded = new URL(url).searchParams.get('testSettings');
+        const settings = JSON.parse(h.context.LZString.decompressFromEncodedURIComponent(encoded));
+        assert.equal(Number(settings[1]), step.seconds);
+      }
       if (step.type === 'warmup') firstWords[step.language] = state.training.words;
       if (step.type === 'cooldown') assert.deepEqual(state.training.words,firstWords[step.language]);
       const training = state.training ? {id:state.training.id,kind:state.training.kind,
@@ -254,6 +267,10 @@ for (const languages of ['english', 'both']) {
         assert.equal((await h.send({type:'NEXT_DAILY'},url)).ok,true);
         url = h.updated.at(-1).url;
       } else {
+        const refreshed = h.storage.dailies.find(row => row.day === plan.day + 1);
+        assert.notEqual(refreshed.id, tomorrow.id);
+        assert.ok(refreshed.steps.every(step => !step.startedAt && !step.result));
+        assert.equal(h.storage.dailies.find(row => row.id === plan.id).steps.every(step => step.result), true);
         assert.equal(saved.daily.completed,true);
         assert.equal(saved.daily.comparisons.length, languages === 'both' ? 2 : 1);
         assert.equal(saved.daily.comparisons[0].before,30);
@@ -263,28 +280,25 @@ for (const languages of ['english', 'both']) {
         const openedCount = h.opened.length;
         await h.send({type:'SAVE_SESSION',session:result},url);
         assert.equal(h.opened.length, openedCount);
+        assert.equal(h.storage.dailies.find(row => row.day === plan.day + 1).id, refreshed.id);
       }
     }
   });
 
 }
 
-test('resume today opens planner for absent, old or completed plans', async () => {
+test('resume today opens planner before choosing a routine and after completing today', async () => {
   const h = await harness();
   const page = 'chrome-extension://test-extension/dashboard.html';
   await h.send({type:'RESUME_TODAY'});
   assert.ok(h.opened.at(-1).endsWith('#daily'));
   await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english'}},page);
   const plan = h.storage.dailies[0];
-  plan.steps[0].startedAt = Date.now();
-  plan.day -= 1;
-  await h.send({type:'RESUME_TODAY'});
-  assert.ok(h.opened.at(-1).endsWith('#daily'));
-  plan.day += 1;
   for (const step of plan.steps) step.result = {id:'done'};
   await h.send({type:'RESUME_TODAY'});
   assert.ok(h.opened.at(-1).endsWith('#daily'));
   assert.equal(h.updated.length, 0);
+  assert.equal(h.storage.dailies[0].id, plan.id);
 });
 
 for (const firefox of [false, true]) {
@@ -329,10 +343,14 @@ test('today progress exposes only counts and estimated unfinished minutes', asyn
   assert.equal(reply.today.done, reply.today.total);
   assert.equal(reply.today.minutes, 0);
   plan.day--;
-  assert.equal((await h.send({type:'GET_TODAY_PROGRESS'})).today, null);
+  const nextDay = (await h.send({type:'GET_TODAY_PROGRESS'})).today;
+  assert.equal(nextDay.done, 0);
+  assert.equal(nextDay.minutes, 5);
   plan.day++;
   h.storage.settings.layout = 'alternate';
-  assert.equal((await h.send({type:'GET_TODAY_PROGRESS'})).today, null);
+  const alternate = (await h.send({type:'GET_TODAY_PROGRESS'})).today;
+  assert.equal(alternate.done, 0);
+  assert.equal(alternate.minutes, 5);
   assert.equal(await h.send({type:'GET_TODAY_PROGRESS'},'https://example.com/'), undefined);
 });
 
@@ -355,8 +373,7 @@ for (const firefox of [false, true]) {
     const h = await harness(firefox);
     const page = (firefox ? 'moz' : 'chrome') + '-extension://test-extension/dashboard.html';
     await h.send({type:'CREATE_DAILY', options:{minutes:20,languages:'both'}}, page);
-    await h.send({type:'CREATE_DAILY', options:{minutes:25,languages:'both'}}, page);
-    const plan = h.storage.dailies.at(-1);
+    const {plan} = await h.send({type:'CREATE_DAILY', options:{minutes:25,languages:'both'}}, page);
     assert.equal(plan.steps.some(step => step.startedAt), false);
     const reply = await h.send({type:'RESUME_TODAY'});
     assert.equal(reply.ok, true);
@@ -378,16 +395,51 @@ for (const firefox of [false, true]) {
     backup.id = 'imported-plan';
     const payload = {type:'IMPORT',sessions:[],dailies:[backup],dailyPrefs:backup.prefs,layout:'alternate'};
     assert.equal((await h.send(payload,page)).ok,true);
-    assert.equal(h.storage.dailies.length,2);
+    assert.equal(h.storage.dailies.length,3);
     assert.equal(h.storage.dailyPrefs.minutes,35);
     assert.equal(h.storage.settings.layout,'alternate');
     assert.equal((await h.send(payload,page)).ok,true);
-    assert.equal(h.storage.dailies.length,2);
+    assert.equal(h.storage.dailies.length,3);
     const before = JSON.stringify(h.storage);
     assert.equal((await h.send({...payload,dailies:[{id:'bad'}]},page)).ok,false);
     assert.equal(JSON.stringify(h.storage),before);
     assert.equal((await h.send({type:'IMPORT',sessions:[]},page)).ok,true);
-    assert.equal(h.storage.dailies.length,2);
+    assert.equal(h.storage.dailies.length,3);
     assert.equal(h.storage.dailyPrefs.minutes,35);
+  });
+}
+
+
+for (const firefox of [false, true]) {
+  test('chosen routine automatically rolls forward without replacing imported or started plans: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const page = (firefox ? 'moz' : 'chrome') + '-extension://test-extension/dashboard.html';
+    let clock = Date.UTC(2026, 8, 20, 12);
+    h.context.Date = class extends Date {
+      constructor(...args) { super(...(args.length ? args : [clock])); }
+      static now() { return clock; }
+    };
+    const {plan} = await h.send({type:'CREATE_DAILY',options:{minutes:5,languages:'english'}},page);
+    assert.equal(h.storage.dailies.length, 2);
+    const tomorrow = h.storage.dailies.find(row => row.day === plan.day + 1);
+    await h.send({type:'START_DAILY',id:plan.id},page);
+    const started = JSON.stringify(h.storage.dailies.find(row => row.id === plan.id));
+    await h.send({type:'GET_STATE'},page);
+    await h.send({type:'GET_TODAY_PROGRESS'});
+    assert.equal(JSON.stringify(h.storage.dailies.find(row => row.id === plan.id)), started);
+    assert.equal(h.storage.dailies.find(row => row.day === plan.day + 1).id, tomorrow.id);
+    const backup = structuredClone(h.storage.dailies);
+    h.storage.dailies = [];
+    assert.equal((await h.send({type:'IMPORT',sessions:[],dailies:backup,dailyPrefs:plan.prefs},page)).ok, true);
+    const imported = JSON.stringify(h.storage.dailies);
+    await h.send({type:'GET_STATE'},page);
+    assert.equal(JSON.stringify(h.storage.dailies), imported);
+    clock += 86400000;
+    const response = await h.send({type:'RESUME_TODAY'});
+    assert.equal(response.started, true);
+    assert.equal(new URL(h.updated.at(-1).url).searchParams.get('keyloomDaily'), tomorrow.id);
+    assert.equal(h.storage.dailies.length, 3);
+    assert.ok(h.storage.dailies.some(row => row.day === plan.day + 2));
+    assert.ok(h.storage.dailies.some(row => row.id === plan.id));
   });
 }
