@@ -4,6 +4,37 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
+for (const firefox of [false, true]) {
+  test('aborted lesson keeps 14/32 progress and remaining minutes unchanged: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const api = h.context[firefox ? 'browser' : 'chrome'];
+    const page = api.runtime.getURL('dashboard.html');
+    const {plan} = await h.send({type:'CREATE_DAILY',options:{languages:'english'}}, page);
+    const step = plan.steps[0];
+    plan.steps = Array.from({length:32}, (_, i) => ({...step, id:'step-' + i,
+      ...(i < 14 ? {result:{id:'done-' + i,date:Date.now(),duration:30,wpm:50,accuracy:98}} : {})}));
+    h.storage.dailies = [plan];
+    await h.send({type:'START_DAILY', id:plan.id}, page);
+    const url = h.opened.at(-1);
+    const current = h.storage.dailies[0].steps[14];
+    const before = (await h.send({type:'GET_TODAY_PROGRESS'}, url)).today;
+    const result = {...h.session('aborted'),mode:'custom',status:'abandoned',duration:30,
+      date:current.startedAt + 1,
+      training:{id:current.exerciseId,kind:current.kind,targets:[],seconds:30}};
+    const saved = await h.send({type:'SAVE_SESSION',session:result}, url);
+    assert.equal(saved.dailyStep, 'mismatch');
+    assert.equal(saved.daily, null);
+    const after = (await h.send({type:'GET_TODAY_PROGRESS'}, url)).today;
+    assert.equal(after.done, 14);
+    assert.equal(after.total, 32);
+    assert.deepEqual(after, before);
+    assert.equal((await h.send({type:'NEXT_DAILY'}, url)).ok, false);
+    const retry = await h.send({type:'SAVE_SESSION',session:{...result,id:'retry',status:'completed'}}, url);
+    assert.equal(retry.dailyStep, 'completed');
+    assert.equal((await h.send({type:'GET_TODAY_PROGRESS'}, url)).today.done, 15);
+  });
+}
+
 async function harness(firefox = false) {
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');

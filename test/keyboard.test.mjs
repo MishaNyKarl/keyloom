@@ -181,3 +181,13 @@ test('only an explicitly permitted pending shortcut works while menu is blocked'
   assert.equal((await h.key({altKey:true,code:'KeyK'})).prevented, undefined);
   assert.equal(count, 1);
 });
+
+test('ordinary typing never queries command availability or the host DOM', async () => {
+  let checks = 0;
+  const h = harness({canOpen:() => {checks++;return true;},commands:[]});
+  h.doc.querySelector = () => {checks++;return null;};
+  for (const key of ['a','b',' ','Backspace','Enter','Tab','Escape']) {
+    await h.key({key});
+  }
+  assert.equal(checks, 0);
+});

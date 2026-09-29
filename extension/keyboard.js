@@ -121,7 +121,7 @@
         if (event.code === 'KeyK') { if (ready()) { stop(event); open(); } return; }
         const command = available().find(row => row.key === event.code);
         if (command && allowed(command)) { stop(event); void run(command); }
-      } else if (ready() && escape && event.key === 'Escape' && !dialog?.open &&
+      } else if (escape && event.key === 'Escape' && ready() && !dialog?.open &&
         !document.querySelector('dialog[open]') &&
         !event.target.closest?.('input, textarea, select, [contenteditable="true"]')) {
         stop(event);

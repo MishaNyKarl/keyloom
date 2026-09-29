@@ -1,6 +1,13 @@
 # Публикация Keyloom в магазинах
 
-Состояние на 23 сентября 2026: Firefox 1.0.0 одобрен и опубликован. Версия 1.0.1 отправлена в AMO с исходным архивом и примечаниями; статус «Ожидает проверки», ID 6507945. Валидатор: 0 ошибок и предупреждений. Исходный commit: 98067b6 в main. Пройдены 155 тестов и статические проверки исходников и Firefox-пакета. Полное ручное прохождение в установленном Firefox для этого релиза не выполнено.
+Состояние на 29 сентября 2026: подготовлена версия 1.0.2 со снижением нагрузки на ввод
+и исправлением зачёта прерванных тестов. Пройдены 164 теста и статические проверки
+исходников и Firefox-пакета. На синтетическом DOM-стенде в Chromium сохранены все
+252 нажатия; после первого нажатия 251 символ вызвал 0 чтений геометрии и 0 вызовов
+наблюдателя против 1506 и 251 до исправления. Остановка `failed (slow timer)` сохраняется
+как прерванный тест. Это проверка адаптера, а не замер производительности самого Monkeytype.
+Тестовый Firefox не запустился из-за ошибки side-by-side конфигурации Windows;
+полное прохождение в установленном Firefox не проверено.
 CI/CD сейчас обновляет личный API; он не публикует расширения в магазинах автоматически.
 
 ## Что подготовить в продукте
@@ -49,8 +56,8 @@ CI/CD сейчас обновляет личный API; он не публику
 PowerShell, после подготовки:
 
 ```powershell
-Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-1.0.1.zip -Force
-Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-1.0.1.zip -Force
+Compress-Archive -Path artifacts/firefox/* -DestinationPath artifacts/keyloom-firefox-1.0.2.zip -Force
+Compress-Archive -Path artifacts/firefox-source/* -DestinationPath artifacts/keyloom-firefox-source-1.0.2.zip -Force
 ```
 
 В пакет для установки загружается первый ZIP. Второй — в поле исходников для ревью.

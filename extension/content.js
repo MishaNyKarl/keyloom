@@ -10,6 +10,10 @@
   let dailyState = null, nextButton, panel, widget, theme = 'dark', advancing = false;
   let todayProgress = null, progressPanel;
   let savingId = null, queuedAdvanceId = null;
+  let wordsRoot, testPanel, resultPanel, notificationRoot;
+  let testVisible = false, resultVisible = false;
+  let lifecycleObserver, bootstrapObserver, observedFirst;
+  let observedNodes = new Map(), wordTargets = new WeakMap();
   const send = async message => {
     try {
       const reply = await extensionApi.runtime.sendMessage(message);
@@ -109,7 +113,14 @@
     }
   }
   function targetText(node) {
-    return Array.from(node.querySelectorAll('letter:not(.extra)')).map(l => l.textContent).join('').normalize('NFC');
+    // A word's expected letters are immutable; typing changes classes and adds
+    // extra letters. Weak keys do not retain lines removed from long tests.
+    if (!wordTargets.has(node)) {
+      const text = Array.from(node.querySelectorAll('letter:not(.extra)'))
+        .map(letter => letter.textContent).join('').normalize('NFC');
+      wordTargets.set(node, text);
+    }
+    return wordTargets.get(node);
   }
   const selectedButton = KeyloomConfiguration.selected;
   function mode() {
@@ -120,6 +131,7 @@
     return activeMode?.textContent.trim() ?? selected?.getAttribute('mode') ?? 'unknown';
   }
   function finish(statusValue) {
+    if (session?.abortReason) statusValue = 'abandoned';
     if (statusValue !== 'completed') queuedAdvanceId = null;
     const finished = session;
     session = null;
@@ -141,6 +153,11 @@
       status = 'На паузе';
       if (reply.saved) {
         status = statusValue === 'completed' ? 'Тест сохранён' : 'Тест прерван';
+        if (finished.abortReason === 'performance') {
+          status = 'Monkeytype остановил тест из-за производительности';
+        } else if (finished.abortReason) {
+          status = 'Тест прерван · шаг плана не засчитан';
+        }
         if (dailyState?.completed) status = 'Ежедневный план завершён!';
         if (statusValue === 'completed' && reply.dailyStep === 'mismatch') {
           status = 'Тест сохранён · шаг не засчитан: открой его из плана';
@@ -155,15 +172,24 @@
     });
   }
   function check() {
-    checkQueued = false;
-    const root = document.querySelector('#words');
-    const first = root?.querySelector('.word');
-    const testVisible = visible(document.querySelector('#typingTest'));
-    const resultVisible = visible(document.querySelector('#result'));
+    bindLifecycle();
+    const first = wordsRoot?.querySelector('.word');
+    observedFirst = first;
+    testVisible = visible(testPanel);
+    resultVisible = visible(resultPanel);
     if (session && location.pathname !== session.path) finish('abandoned');
     // Monkeytype hides typing before asynchronously revealing results. The gap is
     // not a cancellation signal, regardless of animation/calculation duration.
-    if (resultVisible) { finish('completed'); paint(); return; }
+    if (resultVisible) {
+      const info = document.querySelector('#result .stats .info .bottom');
+      const text = info?.textContent ?? '';
+      if (session && visible(info) && /failed\s*\(|bailed out|afk detected/i.test(text)) {
+        session.abortReason = text.includes('slow timer') ? 'performance' : 'interrupted';
+      }
+      finish('completed');
+      paint();
+      return;
+    }
     // Generated DOM nodes change on restart; removed first lines in timed tests do not reset index to zero.
     const readyForNewTest = testVisible && first?.getAttribute('data-wordindex') === '0' &&
       document.querySelector('#wordsInput')?.value === ' ';
@@ -172,6 +198,7 @@
       if (firstNode) finish('abandoned');
       disabledForTest = false;
       firstNode = first;
+      wordTargets = new WeakMap();
       if (!session) status = 'Готов к тесту';
     }
     if (session && !testVisible) status = queuedAdvanceId ?
@@ -179,14 +206,81 @@
     paint();
   }
   function queueCheck() {
-    if (!checkQueued) { checkQueued = true; requestAnimationFrame(check); }
+    if (checkQueued) return;
+    checkQueued = true;
+    requestAnimationFrame(() => {
+      checkQueued = false;
+      check();
+    });
+  }
+  function bindLifecycle() {
+    wordsRoot = document.querySelector('#words');
+    testPanel = document.querySelector('#typingTest');
+    resultPanel = document.querySelector('#result');
+    notificationRoot = document.querySelector('[data-ui-element="notifications"]');
+    const nodes = new Map();
+    for (const root of [wordsRoot, testPanel, resultPanel, notificationRoot]) {
+      for (let node = root; node; node = node.parentElement) nodes.set(node, 'container');
+    }
+    nodes.set(document.body, 'container');
+    if (wordsRoot) nodes.set(wordsRoot, 'words');
+    if (notificationRoot) nodes.set(notificationRoot, 'notifications');
+    if (nodes.size !== observedNodes.size ||
+      [...nodes].some(([node, kind]) => observedNodes.get(node) !== kind)) {
+      lifecycleObserver.disconnect();
+      for (const [node, kind] of nodes) {
+        lifecycleObserver.observe(node, {
+          childList: true,
+          subtree: kind === 'notifications',
+          ...(kind === 'container' ? {attributes:true, attributeFilter:['class', 'style', 'hidden']} : {})
+        });
+      }
+      observedNodes = nodes;
+    }
+    // Only initial discovery needs a subtree observer. Never subscribe to the
+    // stream of letter classes, extra letters and caret animation during a test.
+    if (wordsRoot && testPanel && resultPanel) {
+      bootstrapObserver?.disconnect();
+      bootstrapObserver = null;
+    } else if (!bootstrapObserver) {
+      bootstrapObserver = new MutationObserver(queueCheck);
+      bootstrapObserver.observe(document.body, {childList:true, subtree:true});
+    }
+  }
+  function onLifecycleMutation(records) {
+    let changed = false;
+    for (const record of records) {
+      if (notificationRoot?.contains(record.target)) {
+        if (session && record.type === 'childList') {
+          for (const node of record.addedNodes) {
+            const text = node.textContent ?? '';
+            const performanceAbort = text.includes('Stopping the test due to bad performance');
+            if (performanceAbort || /Test failed -|Test invalid - (inconsistent test duration|AFK detected|wpm|raw|accuracy)/i.test(text)) {
+              session.abortReason = performanceAbort ? 'performance' : 'interrupted';
+              queuedAdvanceId = null;
+              changed = true;
+            }
+          }
+        }
+        continue;
+      }
+      if (record.target === wordsRoot && wordsRoot.firstElementChild === observedFirst) continue;
+      changed = true;
+    }
+    if (changed) queueCheck();
   }
   function capture(event) {
     if (event.target?.id !== 'wordsInput' || !settings.enabled || !event.isTrusted) return;
-    check();
+    // Timestamp before DOM work so the adapter's own cost is not counted as
+    // typing time. Layout and UI work belong to lifecycle transitions only.
+    const time = performance.now();
+    const replaced = wordsRoot?.firstElementChild !== observedFirst;
+    if ((!session && !disabledForTest) || replaced || (session && location.pathname !== session.path)) {
+      check();
+    }
     if (disabledForTest) return;
-    if (!visible(document.querySelector('#typingTest')) || visible(document.querySelector('#result'))) return;
-    const node = document.querySelector('#words .word.active');
+    if (!testVisible || resultVisible || session?.abortReason) return;
+    const node = wordsRoot?.querySelector('.word.active');
     if (!node) return;
     if (event.isComposing || event.inputType?.includes('Composition') || event.inputType === 'insertFromPaste') {
       session = null; disabledForTest = true; status = 'IME / вставка · тест пропущен'; paint(); return;
@@ -213,16 +307,17 @@
       session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, configuredSeconds:configuration.configuredSeconds, language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
         layout: settings.layout, mode: testMode, events: [] };
       if(trainingPlan && testMode==='custom' && trainingPlan.layout===settings.layout && trainingPlan.language===session.language)session.training={id:trainingPlan.id,kind:trainingPlan.kind,targets:trainingPlan.targets,seconds:trainingPlan.seconds,...(trainingPlan.wordCount ? {wordCount:trainingPlan.wordCount} : {})};
+      status = 'Записываю тест';
+      paint();
     }
     if (!trainingPlan && /[а-яё]/iu.test(target)) session.language = 'russian';
     const wordIndex=Number(node.getAttribute('data-wordindex'));
     session.maxWordIndex=Math.max(session.maxWordIndex??0,wordIndex);
     if(session.training && trainingPlan.words[wordIndex]!==target)delete session.training;
     if (session.events.length >= core.MAX_EVENTS) { finish('abandoned'); disabledForTest = true; status = 'Лимит длины теста'; paint(); return; }
-    session.events.push({ type: deleting ? 'delete' : 'insert', time: performance.now(),
-      wordIndex: Number(node.getAttribute('data-wordindex')), target,
+    session.events.push({ type: deleting ? 'delete' : 'insert', time,
+      wordIndex, target,
       position: [...value.slice(1)].length, typed: event.data ?? '' });
-    status = 'Записываю тест'; paint();
   }
   document.addEventListener('beforeinput', capture, true);
   document.addEventListener('visibilitychange', () => {
@@ -236,9 +331,7 @@
     if (event.target.closest?.('#restartTestButton')) { check(); finish('abandoned'); }
   }, true);
   function mount() {
-    new MutationObserver(records => {
-      if (records.some(r => r.target !== badge && !badge?.contains(r.target))) queueCheck();
-    }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] });
+    lifecycleObserver = new MutationObserver(onLifecycleMutation);
     check();
     const commands = KeyloomKeyboard.create({
       theme: () => theme,

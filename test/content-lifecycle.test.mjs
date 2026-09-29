@@ -10,32 +10,55 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
   let storageListener, keyboard, resolveSave;
-  let observer, first, clock = 0, wordIndex=0, target='street';
+  let first, active, clock = 0, wordIndex=0, target='street';
+  const observers = [];
+  const reads = {layout:0, target:0, panel:0, queries:0};
   const messages=[];
   const element = () => ({ shown:true, style:{},textContent:'', attributes:new Map(), attributeWrites:0,
     closest(selector) { return selector === '.hidden' && !this.shown ? this : null; },
-    getClientRects() { return this.shown ? [1] : []; },
+    getClientRects() { reads.layout++; return this.shown ? [1] : []; },
     addEventListener(name,cb){this[name]=cb;},
     setAttribute(name,value){this.attributeWrites++;this.attributes.set(name,value);},
-    getAttribute(name){return this.attributes.get(name) ?? null;},contains(){return false;},append(){},prepend(){} });
-  const typing = element(), result = element(), badge = element(); result.shown = false;
+    getAttribute(name){reads.panel++;return this.attributes.get(name) ?? null;},
+    contains(node){for(let n=node;n;n=n.parentElement){if(n===this)return true;}return false;},
+    append(){},prepend(){} });
+  const typing = element(), result = element(), badge = element(), resultInfo = element(); result.shown = false;
   const input = {id:'wordsInput',value:' '};
-  const newWord = () => ({ getAttribute:()=> String(wordIndex), hasAttribute:()=>true,
-    querySelectorAll:()=>[...target].map(textContent=>({textContent})) });
+  const newWord = () => {
+    const index = wordIndex, text = target;
+    return {getAttribute:()=> String(index), hasAttribute:()=>true,
+      querySelectorAll:()=>{reads.target++;return [...text].map(textContent=>({textContent}));}};
+  };
   first = newWord();
-  const root = {querySelector:()=>first};
+  active = first;
+  const root = {querySelector:selector=>selector === '.word.active' ? active : first,
+    get firstElementChild(){return first;}};
+  const notifications = element();
+  const body = element(), page = element(), wrapper = element(), caret = element();
+  page.parentElement = body;
+  typing.parentElement = page; result.parentElement = page;
+  wrapper.parentElement = typing; root.parentElement = wrapper;
+  caret.parentElement = wrapper; notifications.parentElement = body;
+  first.parentElement = root;
   const mode = {textContent:training?'custom':'words', getAttribute:()=>null};
   const created = [];
   let privacy = null;
-  const doc = {body:{append(){}},hidden:false,
+  const doc = {body,hidden:false,
     addEventListener(name, cb) { callbacks[name]=cb; },
     createElement:()=> { const node = created.length ? element() : badge; created.push(node); return node; },
-    querySelector(selector) { if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':first})[selector] ?? null; },
+    querySelector(selector) { reads.queries++; if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':active,'[data-ui-element="notifications"]':notifications,'#result .stats .info .bottom':resultInfo})[selector] ?? null; },
     querySelectorAll:()=>[mode],
   };
   const context = vm.createContext({document:doc, URL, location:{pathname:'/',href:'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=step'}, crypto:webcrypto, performance:{now:()=>clock+=100},
-    getComputedStyle:()=>({visibility:'visible'}),requestAnimationFrame:cb=>frames.push(cb),
-    MutationObserver:class {constructor(cb){observer=cb;}observe(){}},
+    getComputedStyle:()=>{reads.layout++;return {visibility:'visible'};},requestAnimationFrame:cb=>frames.push(cb),
+    MutationObserver:class {
+      constructor(cb){this.cb=cb;this.targets=new Map();observers.push(this);}
+      observe(node,options){
+        if(options.attributes===false && options.attributeFilter)throw new TypeError('Invalid observer options');
+        this.targets.set(node,options);
+      }
+      disconnect(){this.targets.clear();}
+    },
     KeyloomKeyboard:{create(options){keyboard=options;return {open(){}};}},
     KeyloomConfiguration:{selected:()=>true,read:()=>({ok:true})},
     chrome:{runtime:{async sendMessage(message){
@@ -50,18 +73,31 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   // Cross-realm async transport needs a full microtask drain before typing.
   const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
-  const changed = async () => { observer([{target:typing}]); while(frames.length) frames.shift()(); await settle(); };
+  const mutate = records => {
+    for(const observer of observers){
+      const matches=records.filter(record=>[...observer.targets].some(([node,options])=>
+        (node===record.target || options.subtree && node.contains?.(record.target)) &&
+        (record.type==='childList' ? options.childList : options.attributes &&
+          (!options.attributeFilter || options.attributeFilter.includes(record.attributeName)))));
+      if(matches.length)observer.cb(matches);
+    }
+  };
+  const changed = async (records=[{target:typing,type:'attributes',attributeName:'class'}]) => {
+    mutate(records); while(frames.length) frames.shift()(); await settle();
+  };
   const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
   return {get keyboard(){return keyboard;},typing,result,badge,input,saves,type,changed,context,messages,mode,created,
+    reads, frames, mutate, root, caret, notifications, callbacks, page, observers, resultInfo,
     resolveSave(reply) { resolveSave(reply); },
     mountFooter() {
       privacy = {nextElementSibling:null, after(node){this.nextElementSibling=node;}};
       return privacy;
     },
     changeTheme(theme){storageListener({theme:{newValue:theme}},'local');},
-    nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';},
+    nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';active=newWord();active.parentElement=root;if(index===0)first=active;},
     async clickBadge(){badge.click();await settle();},
-    replaceWord(){first=newWord();input.value=' ';},
+    replaceWord(){wordIndex=0;first=newWord();active=first;first.parentElement=root;input.value=' ';},
+    removeFirstLine(){first=active;},
     async clickRestart(){callbacks.click({target:{closest:()=>true}});await settle();},
   };
 }
@@ -308,4 +344,87 @@ test('queued next is discarded on failed, mismatched, final or restarted tests',
     await h.changed();
     assert.equal(h.messages.some(message => message.type === 'NEXT_DAILY'), false, scenario);
   }
+});
+
+test('steady typing does not read layout, reread letters or touch the panel', async () => {
+  const h = await harness();
+  h.type('s');
+  const before = {...h.reads};
+  h.type('treet');
+  assert.equal(h.reads.layout, before.layout);
+  assert.equal(h.reads.target, before.target);
+  assert.equal(h.reads.panel, before.panel);
+  assert.equal(h.frames.length, 0);
+  h.nextWord(1, 'strong'); h.type('strong');
+  assert.equal(h.reads.target, before.target + 1);
+  assert.equal(h.reads.layout, before.layout);
+  h.typing.shown = false; h.result.shown = true; await h.changed();
+  assert.equal(h.saves[0].presses, 12);
+  assert.equal(h.saves[0].words.strong.attempts, 1);
+});
+
+test('caret animation, letter classes and unrelated subtrees schedule no work', async () => {
+  const h = await harness(); h.type('s');
+  const before = {...h.reads};
+  const letter = {parentElement:h.root.querySelector('.word.active')};
+  const unrelated = {parentElement:h.context.document.body};
+  for (let i = 0; i < 100; i++) {
+    h.mutate([{target:h.caret,type:'attributes',attributeName:'style'},
+      {target:letter,type:'attributes',attributeName:'class'},
+      {target:unrelated,type:'childList',addedNodes:[]}]);
+  }
+  assert.equal(h.frames.length, 0);
+  assert.deepEqual(h.reads, before);
+});
+
+test('word restart before the next animation frame does not mix sessions', async () => {
+  const h = await harness(); h.type('str');
+  h.replaceWord();
+  h.mutate([{target:h.root,type:'childList',addedNodes:[]}]);
+  h.type('street');
+  h.typing.shown = false; h.result.shown = true; await h.changed();
+  assert.deepEqual(h.saves.map(row => [row.status,row.presses]),
+    [['abandoned',3],['completed',6]]);
+});
+
+test('performance abort is not credited and cancels a queued next lesson', async () => {
+  const h = await harness(null, true, {completed:false,nextLabel:'Next'});
+  h.type('street'); h.typing.shown = false; await h.changed();
+  await h.keyboard.commands.find(command => command.key === 'KeyN').run();
+  await h.changed([{type:'childList',target:h.notifications,
+    addedNodes:[{textContent:'Stopping the test due to bad performance.'}]}]);
+  h.result.shown = true; await h.changed();
+  assert.equal(h.saves[0].status, 'abandoned');
+  assert.equal(h.messages.some(message => message.type === 'NEXT_DAILY'), false);
+  assert.match(h.badge.textContent, /Monkeytype.*производительност/);
+  h.result.shown = false; h.typing.shown = true; h.replaceWord(); await h.changed();
+  h.type('street'); h.typing.shown = false; h.result.shown = true; await h.changed();
+  assert.equal(h.saves[1].status, 'completed');
+});
+
+test('failed and bailed-out result screens preserve an abandoned session', async () => {
+  for (const info of ['failed (slow timer)', 'failed (minimum accuracy)', 'bailed out', 'afk detected']) {
+    const h = await harness(); h.type('street');
+    h.resultInfo.textContent = info;
+    h.typing.shown = false; h.result.shown = true; await h.changed();
+    assert.equal(h.saves[0].status, 'abandoned', info);
+    assert.equal(h.keyboard.commands.find(command => command.key === 'KeyN').available(), false);
+  }
+  // Repeating the known baseline text is intentional in daily warmup/cooldown.
+  const h = await harness(); h.type('street');
+  h.resultInfo.textContent = 'invalidrepeated';
+  h.typing.shown = false; h.result.shown = true; await h.changed();
+  assert.equal(h.saves[0].status, 'completed');
+});
+
+test('removing old lines does not trigger layout reads on subsequent letters', async () => {
+  const h = await harness(); h.type('street');
+  h.nextWord(10); h.removeFirstLine();
+  await h.changed([{target:h.root,type:'childList',addedNodes:[]}]);
+  const before = h.reads.layout;
+  h.type('street');
+  assert.equal(h.reads.layout, before);
+  h.typing.shown = false; h.result.shown = true; await h.changed();
+  assert.equal(h.saves.length, 1);
+  assert.equal(h.saves[0].status, 'completed');
 });
