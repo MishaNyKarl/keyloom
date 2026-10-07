@@ -71,6 +71,33 @@ async function harness(firefox = false) {
   ], {id});
   return { storage, send, session, opened, updated, context };
 }
+for (const firefox of [false, true]) {
+  test('in-place continuation persists once and resume reuses its prepared exercise: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const api = h.context[firefox ? 'browser' : 'chrome'];
+    const page = api.runtime.getURL('dashboard.html');
+    const {plan} = await h.send({type:'CREATE_DAILY', options:{languages:'english'}}, page);
+    const first = plan.steps[0];
+    plan.steps = [first, {...first, id:'repair-step', type:'repair'}];
+    h.storage.dailies = [plan];
+    await h.send({type:'START_DAILY', id:plan.id}, page);
+    const url = h.opened.at(-1);
+    const started = h.storage.dailies[0].steps[0];
+    await h.send({type:'SAVE_SESSION', session:{...h.session('opening'), mode:'custom',
+      date:started.startedAt + 1, duration:30,
+      training:{id:started.exerciseId, kind:'words', targets:[], seconds:30}}}, url);
+    const replies = await Promise.all([h.send({type:'NEXT_DAILY', inPlace:true}, url),
+      h.send({type:'NEXT_DAILY', inPlace:true}, url)]);
+    const reply = replies.find(row => row.ok);
+    assert.equal(replies.filter(row => row.ok).length, 1);
+    assert.equal(h.updated.length, 0);
+    assert.equal(reply.testSettings[0], 'custom');
+    assert.equal(reply.training.id, h.storage.dailies[0].steps[1].exerciseId);
+    await h.send({type:'RESUME_TODAY'}, reply.url);
+    const resumed = await h.send({type:'GET_STATE'}, h.updated.at(-1).url);
+    assert.deepEqual(structuredClone(resumed.training), structuredClone(reply.training));
+  });
+}
 test('concurrent tabs cannot overwrite each other or duplicate results', async () => {
   const {storage,send,session} = await harness();
   const responses = await Promise.all([send({type:'SAVE_SESSION',session:session('a')}),send({type:'SAVE_SESSION',session:session('b')}),send({type:'SAVE_SESSION',session:session('a')})]);
@@ -291,7 +318,8 @@ for (const [languages, goal] of [['english','balanced'], ['both','balanced'],
       const result = {...h.session('route-' + index),date:step.startedAt+1,language:step.language,
         mode:training ? 'custom' : step.type,duration:step.type === 'cooldown' ? 25 : step.seconds,
         ...(training ? {training} : {})};
-      const saved = await h.send({type:'SAVE_SESSION',session:result},url);
+      const saved = await h.send({type:'SAVE_SESSION',session:result,
+        configuredWordset:step.wordset},url);
       assert.equal(saved.dailyStep,'completed');
       if (index < plan.steps.length-1) {
         assert.equal(h.opened.length, 1);

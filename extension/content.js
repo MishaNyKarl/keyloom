@@ -105,7 +105,38 @@
     status = 'Открываю следующее задание…';
     paint();
     try {
-      await send({type:'NEXT_DAILY'});
+      const reply = await send({type:'NEXT_DAILY', inPlace:true});
+      if (!reply.url) {
+        return;
+      }
+      let start;
+      try {
+        start = await KeyloomConfiguration.prepare(document, reply.testSettings);
+      } catch {
+        // The prepared step is already persisted; its URL is the recovery path.
+        location.assign(reply.url);
+        return;
+      }
+      if (!start) {
+        location.assign(reply.url);
+        return;
+      }
+      // Update markers before restarting so the first trusted input uses the new exercise.
+      history.replaceState(null, '', reply.url);
+      trainingPlan = reply.training ?? null;
+      dailyState = null;
+      firstNode = null;
+      disabledForTest = false;
+      wordTargets = new WeakMap();
+      try {
+        start();
+      } catch {
+        location.assign(reply.url);
+        return;
+      }
+      advancing = false;
+      status = 'Начните следующий тест';
+      paint();
     } catch (error) {
       advancing = false;
       status = 'Не удалось перейти: ' + error.message;
@@ -143,7 +174,9 @@
     dailyState = null;
     status = queuedAdvanceId ? 'Следующее задание откроется после сохранения результата' : 'Сохраняю результат…';
     paint();
-    pendingSave=send({ type: 'SAVE_SESSION', session: result, configuredSeconds:finished.configuredSeconds }).then(reply => {
+    pendingSave=send({ type: 'SAVE_SESSION', session: result,
+      configuredSeconds:finished.configuredSeconds,
+      configuredWordset:finished.configuredWordset }).then(reply => {
       const requested = queuedAdvanceId === result.id;
       if (savingId === result.id) savingId = null;
       if (requested) queuedAdvanceId = null;
@@ -270,7 +303,7 @@
     if (changed) queueCheck();
   }
   function capture(event) {
-    if (event.target?.id !== 'wordsInput' || !settings.enabled || !event.isTrusted) return;
+    if (event.target?.id !== 'wordsInput' || !settings.enabled || !event.isTrusted || advancing) return;
     // Timestamp before DOM work so the adapter's own cost is not counted as
     // typing time. Layout and UI work belong to lifecycle transitions only.
     const time = performance.now();
@@ -304,7 +337,9 @@
       // Never collect a partial session when enabled or installed midway through a test.
       if (node.getAttribute('data-wordindex') !== '0' || value !== ' ' || deleting) { status = 'Начните новый тест'; paint(); return; }
       queuedAdvanceId = null;
-      session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname, configuredSeconds:configuration.configuredSeconds, language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
+      session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname,
+        configuredSeconds:configuration.configuredSeconds, configuredWordset:configuration.configuredWordset,
+        language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
         layout: settings.layout, mode: testMode, events: [] };
       if(trainingPlan && testMode==='custom' && trainingPlan.layout===settings.layout && trainingPlan.language===session.language)session.training={id:trainingPlan.id,kind:trainingPlan.kind,targets:trainingPlan.targets,seconds:trainingPlan.seconds,...(trainingPlan.wordCount ? {wordCount:trainingPlan.wordCount} : {})};
       status = 'Записываю тест';

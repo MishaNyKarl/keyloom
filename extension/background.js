@@ -128,7 +128,8 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
       const accepted = next.find(row => row.id === incoming.id);
-      let updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, sender.url, message.configuredSeconds) : dailies;
+      let updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, sender.url,
+        message.configuredSeconds, message.configuredWordset) : dailies;
       const newlyCompleted = updatedDailies.some(plan => plan.steps.every(step => step.result) &&
         dailies.find(previous => previous.id === plan.id)?.steps.some(step => !step.result));
       if (newlyCompleted) {
@@ -208,18 +209,26 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       if (['time','quote'].includes(step.type)) {
         url = KeyloomDaily.nativeUrl(daily, step);
       } else {
-        const plan = KeyloomDaily.exercise(daily, step, sessions, learning, KeyloomWords[step.language]);
+        const plan = exercises.find(row => row.id === step.exerciseId &&
+          row.language === step.language && row.layout === daily.layout) ??
+          KeyloomDaily.exercise(daily, step, sessions, learning, KeyloomWords[step.language]);
         if (!KeyloomAnalytics.validPlan(plan)) throw new Error('Не удалось подготовить шаг плана');
         step.exerciseId = plan.id;
         step.targets = plan.targets;
         step.kind = plan.kind;
-        updatedExercises = [...exercises, plan].slice(-40);
+        updatedExercises = [...exercises.filter(row => row.id !== plan.id), plan].slice(-40);
         url = KeyloomPractice.url(plan.words, plan.language, plan.id);
       }
       step.startedAt = Date.now();
       await extensionApi.storage.local.set({dailies, exercises:updatedExercises});
       const destination = {url:url + '&keyloomDaily=' + encodeURIComponent(daily.id) +
         '&keyloomStep=' + encodeURIComponent(step.id)};
+      if (continuing && message.inPlace === true) {
+        return {started:true, url:destination.url,
+          testSettings:JSON.parse(LZString.decompressFromEncodedURIComponent(
+            new URL(destination.url).searchParams.get('testSettings'))),
+          training:updatedExercises.find(row => row.id === step.exerciseId) ?? null};
+      }
       try {
         if (continuing || (resuming && fromMonkeytype)) await extensionApi.tabs.update(sender.tab.id, destination);
         else await extensionApi.tabs.create(destination);

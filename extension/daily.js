@@ -9,8 +9,30 @@
     english: 'the morning light fills the room and a quiet day begins we open the window and listen to the wind outside there is time to notice little things and find a steady rhythm every small step helps us move forward with care',
     russian: 'утренний свет наполняет комнату и начинается тихий день мы открываем окно и слушаем ветер за окном есть время заметить простые вещи и найти спокойный ритм каждый небольшой шаг помогает двигаться вперёд без спешки и сохранять внимание к тому что происходит вокруг'
   };
-  function warmupWords(language, speed) {
-    const source = warmupTexts[language].split(' ');
+  const warmupVariants = {
+    english: [
+      warmupTexts.english,
+      'a narrow path leads through the forest we walk between tall trees and hear birds above the leaves the air is fresh and the journey gives us time to think about new ideas and simple plans',
+      'the train arrives at a small station people carry bags and greet their friends beyond the platform a river flows past old houses we follow the street and discover a new place with every turn',
+      'we arrange books on the shelf and choose a story for the evening each page brings a different voice and a new thought outside the rain falls softly while the room stays warm and quiet',
+      'in the workshop we measure each part and try a new design a careful hand makes steady progress sometimes a small change solves a difficult problem and helps the whole project take shape'
+    ],
+    russian: [
+      warmupTexts.russian,
+      'узкая тропинка ведёт через лес мы идём между высокими деревьями и слышим птиц над листвой свежий воздух помогает собраться с мыслями вдали шумит ручей на каждом повороте открывается новый вид и хочется немного задержаться',
+      'поезд прибывает на маленькую станцию люди несут сумки и встречают друзей за платформой течёт река вдоль берега стоят старые дома мы выбираем незнакомую улицу и постепенно узнаём город замечая интересные детали вокруг',
+      'вечером мы расставляем книги на полке и выбираем новую историю каждая страница приносит незнакомый голос и повод задуматься за окном спокойно идёт дождь в комнате тепло можно приготовить чай и почитать ещё немного',
+      'в мастерской мы измеряем детали и пробуем новый способ работы точные движения помогают постепенно собрать нужную форму иногда небольшое изменение решает сложную задачу важно сохранять терпение и внимательно проверять каждый следующий шаг'
+    ]
+  };
+  const wordsets = {
+    english: ['english', 'english_1k', 'english_5k', 'english_10k', 'english_25k', 'english_450k'],
+    russian: ['russian', 'russian_1k', 'russian_5k', 'russian_10k', 'russian_25k',
+      'russian_50k', 'russian_375k']
+  };
+  function warmupWords(language, speed, now) {
+    const variants = warmupVariants[language];
+    const source = variants[KeyloomAnalytics.day(now) % variants.length].split(' ');
     const budget = Math.max(10, Math.min(300, speed)) * 5 / 2;
     const words = [];
     let length = 0;
@@ -52,10 +74,13 @@
   }
   options.defaults = { minutes:20,languages:'both',goal:'balanced',kind:'auto',rounds:3,seconds:60,
     repair:true,quote:true,repeat:true,numbers:false,punctuation:false,targets:'' };
-  function create(input, sessions, layout, now = Date.now(), id = crypto.randomUUID()) {
+  function create(input, sessions, layout, now = Date.now(), id = crypto.randomUUID(), random = Math.random) {
     const prefs = options(input);
-    if (prefs.goal === 'adaptive') return createAdaptive(prefs, sessions, layout, now, id);
-    const languages = prefs.languages === 'both' ? ['english','russian'] : [prefs.languages];
+    const languages = prefs.languages === 'both' ?
+      (random() < .5 ? ['english', 'russian'] : ['russian', 'english']) : [prefs.languages];
+    if (prefs.goal === 'adaptive') {
+      return addVocabulary(createAdaptive(prefs, sessions, layout, now, id, languages));
+    }
     const steps = [];
     for (const language of languages) {
       let budget = prefs.minutes * 60 / languages.length;
@@ -66,7 +91,7 @@
         budget -= seconds;
         return true;
       };
-      const words = warmupWords(language, speed);
+      const words = warmupWords(language, speed, now);
       add('warmup', 30, 'Разминка · начальный текст', {words});
       budget -= 30; // Reserve the identical closing text before optional blocks.
       if (prefs.repeat && budget >= 120) add('review', 30, 'Повторение по расписанию');
@@ -94,10 +119,20 @@
       budget += 30;
       add('cooldown', 30, 'Повтор текста · сравнение с разминкой', {words:[...words]});
     }
-    return {id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps};
+    return addVocabulary({id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps, recipe:2});
   }
-  function createAdaptive(prefs, sessions, layout, now, id) {
-    const languages = prefs.languages === 'both' ? ['english', 'russian'] : [prefs.languages];
+  function addVocabulary(plan) {
+    for (const language of ['english', 'russian']) {
+      const step = plan.steps.findLast(row => row.language === language &&
+        row.type === 'time' && row.seconds >= 30);
+      if (step) {
+        step.wordset = wordsets[language][plan.day % wordsets[language].length];
+        step.label += ' · новые слова: ' + step.wordset.replace('_', ' ');
+      }
+    }
+    return plan;
+  }
+  function createAdaptive(prefs, sessions, layout, now, id, languages) {
     const steps = [];
     for (const language of languages) {
       const profile = KeyloomCore.profile(sessions, {language, layout});
@@ -114,7 +149,7 @@
         add(type, seconds, label, extra);
         budget -= seconds;
       };
-      const words = warmupWords(language, speed);
+      const words = warmupWords(language, speed, now);
       add('warmup', 30, 'Разминка · спокойно и точно', {words});
       const burst = () => use('time', 15, 'Разгон · ориентир ' + burstSpeed + ' WPM, без напряжения');
       burst();
@@ -154,7 +189,7 @@
       }
       add('cooldown', 30, 'Повтор текста · сравнение с разминкой', {words:[...words]});
     }
-    return {id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps};
+    return {id, date:now, day:KeyloomAnalytics.day(now), layout, prefs, steps, recipe:2};
   }
   // Prepare only the current local calendar day and the next one; never replace started work.
   function schedule(plans, prefs, sessions, layout, now = Date.now(), refreshTomorrow = false,
@@ -168,7 +203,8 @@
       const day = KeyloomAnalytics.day(date);
       const found = result.filter(plan => plan.day === day && plan.layout === layout).at(-1);
       const untouched = found && found.steps.every(step => !step.result && !step.startedAt);
-      if (!found || (index === 1 && refreshTomorrow && untouched)) {
+      if (!found || (untouched && found.recipe !== 2) ||
+        (index === 1 && refreshTomorrow && untouched)) {
         const plan = create(prefs, sessions, layout, date, makeId());
         result = [...result.filter(row => row !== found), plan];
       }
@@ -243,10 +279,10 @@
   function nativeUrl(daily, step) {
     const settings = [step.type === 'quote' ? 'quote' : 'time',
       String(step.type === 'quote' ? step.quoteId : step.seconds), null,
-      daily.prefs.punctuation, daily.prefs.numbers, step.language, 'normal', []];
+      daily.prefs.punctuation, daily.prefs.numbers, step.wordset ?? step.language, 'normal', []];
     return 'https://monkeytype.com/?testSettings=' + LZString.compressToEncodedURIComponent(JSON.stringify(settings));
   }
-  function complete(dailies, session, url, configuredSeconds) {
+  function complete(dailies, session, url, configuredSeconds, configuredWordset) {
     const query = new URL(url).searchParams;
     return dailies.map(daily => {
       if (daily.id !== query.get('keyloomDaily') || daily.layout !== session.layout) return daily;
@@ -257,6 +293,7 @@
         daily.steps.some(row => row.result?.id === session.id)) return daily;
       const native = ['time','quote'].includes(step.type);
       if (native && (session.mode !== step.type || session.training)) return daily;
+      if (step.wordset && configuredWordset !== step.wordset) return daily;
       if (step.type === 'time' && (configuredSeconds !== undefined ?
         configuredSeconds !== step.seconds : Math.abs(session.duration - step.seconds) > 5)) return daily;
       if (!native && session.training?.id !== step.exerciseId) return daily;
@@ -320,6 +357,10 @@
           !number(step.seconds, 3600) || step.seconds < 1) fail();
         ids.add(step.id);
         const row = {id:step.id, language:step.language, type:step.type, seconds:step.seconds, label:step.label};
+        if (step.wordset !== undefined) {
+          if (step.type !== 'time' || !wordsets[step.language].includes(step.wordset)) fail();
+          row.wordset = step.wordset;
+        }
         if (['warmup','cooldown'].includes(step.type)) {
           if (!Array.isArray(step.words) || !step.words.length || step.words.length > 300 ||
             !step.words.every(word => text(word) && KeyloomCore.supportedToken(word))) fail();
@@ -347,7 +388,9 @@
         }
         return row;
       });
-      return {id:plan.id,date:plan.date,day:KeyloomAnalytics.day(plan.date),layout:plan.layout,prefs,steps};
+      if (plan.recipe !== undefined && plan.recipe !== 2) fail();
+      return {id:plan.id,date:plan.date,day:KeyloomAnalytics.day(plan.date),layout:plan.layout,prefs,steps,
+        ...(plan.recipe === 2 ? {recipe:2} : {})};
     });
     const merged = new Map(existing.map(plan => [plan.id, plan]));
     for (const plan of cleaned) {
@@ -355,7 +398,8 @@
       if (!local) merged.set(plan.id, plan);
       else merged.set(plan.id, {...local, steps:local.steps.map(step => {
         const imported = plan.steps.find(row => row.id === step.id && row.type === step.type &&
-          row.language === step.language && JSON.stringify(row.words) === JSON.stringify(step.words));
+          row.language === step.language && row.wordset === step.wordset &&
+          JSON.stringify(row.words) === JSON.stringify(step.words));
         return !step.result && imported?.result ? {...step,result:imported.result} : step;
       })});
     }

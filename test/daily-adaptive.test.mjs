@@ -13,6 +13,79 @@ const session = (language, wpm) => ({id:language, date:now, language, layout:'de
   status:'completed', mode:'time', duration:60, wpm, accuracy:98, presses:300,
   chars:{}, pairs:{}, words:{}, sequences:{}});
 
+test('daily texts rotate, both language orders are possible and saved routes stay stable', () => {
+  for (const goal of ['balanced', 'adaptive']) {
+    const englishFirst = d.create({goal}, [], 'default', now, 'first', () => .1);
+    const russianFirst = d.create({goal}, [], 'default', now, 'second', () => .9);
+    assert.equal(englishFirst.steps[0].language, 'english');
+    assert.equal(russianFirst.steps[0].language, 'russian');
+    const nextDay = new Date(now);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const tomorrow = d.create({goal}, [], 'default', nextDay.getTime(), 'tomorrow', () => .1);
+    for (const language of ['english', 'russian']) {
+      const opening = englishFirst.steps.find(step => step.language === language);
+      assert.notDeepEqual(opening.words, tomorrow.steps.find(step => step.language === language).words);
+      assert.deepEqual(opening.words, englishFirst.steps.find(step =>
+        step.language === language && step.type === 'cooldown').words);
+    }
+    assert.deepEqual(d.importPlans([], [russianFirst])[0].steps, russianFirst.steps);
+    assert.equal(d.schedule([russianFirst], russianFirst.prefs, [], 'default', now)[0], russianFirst);
+  }
+});
+
+test('daily vocabulary rotates through every numeric dictionary in both languages within budget', () => {
+  const expected = {
+    english:['english', 'english_1k', 'english_5k', 'english_10k', 'english_25k', 'english_450k'],
+    russian:['russian', 'russian_1k', 'russian_5k', 'russian_10k', 'russian_25k', 'russian_50k', 'russian_375k']
+  };
+  for (const goal of ['balanced', 'adaptive']) {
+    const seen = {english:new Set(), russian:new Set()};
+    for (let offset = 0; offset < 7; offset++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + offset);
+      const plan = d.create({goal, minutes:5}, [], 'default', date.getTime(), 'vocabulary', () => .1);
+      assert.equal(plan.steps.reduce((sum, step) => sum + step.seconds, 0), 300);
+      const restored = d.importPlans([], [plan])[0];
+      for (const language of ['english', 'russian']) {
+        const steps = restored.steps.filter(step => step.language === language && step.wordset);
+        assert.equal(steps.length, 1);
+        seen[language].add(steps[0].wordset);
+        const settings = JSON.parse(context.LZString.decompressFromEncodedURIComponent(
+          new URL(d.nativeUrl(restored, steps[0])).searchParams.get('testSettings')));
+        assert.equal(settings[5], steps[0].wordset);
+      }
+    }
+    for (const language of ['english', 'russian']) {
+      assert.deepEqual([...seen[language]].sort(), expected[language].sort());
+    }
+  }
+});
+
+test('only untouched old plans are upgraded and invalid dictionary imports are rejected', () => {
+  const old = d.create({}, [], 'default', now, 'old', () => .1);
+  delete old.recipe;
+  assert.notEqual(d.schedule([old], old.prefs, [], 'default', now)[0].id, old.id);
+  old.steps[0].startedAt = now;
+  assert.equal(d.schedule([old], old.prefs, [], 'default', now)[0], old);
+  const invalid = structuredClone(old);
+  invalid.steps.find(step => step.wordset).wordset = 'french';
+  assert.throws(() => d.importPlans([], [invalid]), /Некорректные/);
+});
+
+test('vocabulary credit requires the selected dictionary as well as mode, duration and language', () => {
+  const plan = d.create({languages:'russian'}, [], 'default', now, 'words');
+  const step = plan.steps.find(row => row.wordset);
+  plan.steps = [step];
+  step.startedAt = now;
+  const result = {...session('russian', 50), id:'vocabulary-result', date:now + 1,
+    duration:step.seconds};
+  const url = 'https://monkeytype.com/?keyloomDaily=words&keyloomStep=' + step.id;
+  assert.equal(d.complete([plan], result, url, step.seconds, 'russian_unsupported')[0], plan);
+  assert.equal(d.complete([plan], result, url, step.seconds)[0], plan);
+  assert.equal(d.complete([plan], result, url, step.seconds, step.wordset)[0].steps[0].result.id,
+    result.id);
+});
+
 test('adaptive plans cover the core loads within every supported time and language budget', () => {
   for (const minutes of [5,10,15,20,25,30,35,45,60]) {
     for (const languages of ['english', 'russian', 'both']) {

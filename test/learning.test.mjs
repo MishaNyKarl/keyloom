@@ -135,8 +135,9 @@ test('step completion requires matching launch and completed test and is idempot
 
 test('persisted words remain usable for explicit practice after source sessions disappear', () => {
   const learning = l.ingest(null,[session('word')]);
-  const plan = d.create({kind:'pairs',targets:'th',repeat:false},[],'default',now,'target');
-  const step = plan.steps.find(row=>row.type==='focus');
+  const plan = d.create({kind:'pairs',targets:'th',repeat:false},[],
+    'default',now,'target',()=>.9);
+  const step = plan.steps.find(row=>row.type==='focus' && row.language==='english');
   const exercise = d.exercise(plan,step,[],learning,['cat'],()=>.1);
   assert.ok(exercise.words.includes('thimble'));
   assert.ok(c.validateSession(session('word')));

@@ -43,3 +43,64 @@ test('captures selected time duration without confusing words mode', () => {
   const words = KeyloomConfiguration.inspect({buttons:[{text:'words',selected:true},{text:'60',selected:true}]});
   assert.equal(words.configuredSeconds,undefined);
 });
+
+function launchDocument(mode = 'time', wordset = 'english') {
+  const clicks = [];
+  const controls = ['time', 'custom', '15', '30', '60', '120', 'change', 'punctuation', 'numbers']
+    .map(text => ({textContent:text, getAttribute:() => String(text === mode || text === '60'),
+      click:() => clicks.push(text)}));
+  const next = {click:() => clicks.push('next')};
+  const doc = {
+    querySelector:selector => selector.includes('testmodesnotice') ?
+      {querySelectorAll:() => [button(wordset, [], ['fa-globe-americas'])]} :
+      (selector === '#nextTestButton' ? next : null),
+    querySelectorAll:() => controls
+  };
+  return {doc, clicks};
+}
+
+test('in-place time launch restarts same duration and changes a different duration via controls', async () => {
+  const h = launchDocument();
+  const start = await KeyloomConfiguration.prepare(h.doc,
+    ['time', '60', null, false, false, 'english']);
+  assert.deepEqual(h.clicks, []);
+  start();
+  assert.deepEqual(h.clicks, ['next']);
+  const change = await KeyloomConfiguration.prepare(h.doc,
+    ['time', '30', null, false, false, 'english']);
+  change();
+  assert.deepEqual(h.clicks, ['next', '30']);
+});
+
+test('unsupported in-place settings fall back before touching controls', async () => {
+  const h = launchDocument();
+  for (const settings of [
+    ['time', '60', null, false, false, 'russian'],
+    ['time', '60', null, false, false, 'english_5k'],
+    ['quote', '719', null, false, false, 'english'],
+    ['time', '60', null, true, false, 'english'],
+    ['time', '300', null, false, false, 'english']
+  ]) {
+    assert.equal(await KeyloomConfiguration.prepare(h.doc, settings), null);
+  }
+  assert.deepEqual(h.clicks, []);
+});
+
+test('custom launch fills only the custom modal and submits an exact simple word test', async () => {
+  const h = launchDocument('custom');
+  const text = {value:'old', dispatchEvent:event => h.clicks.push(event.type)};
+  const modal = {
+    querySelector:selector => selector === 'textarea' ? text : {click:() => h.clicks.push('submit')},
+    querySelectorAll:() => ['simple', 'space'].map(textContent =>
+      ({textContent, click:() => h.clicks.push(textContent)}))
+  };
+  const query = h.doc.querySelector;
+  h.doc.querySelector = selector => selector.includes('CustomTextModal') ? modal : query(selector);
+  const start = await KeyloomConfiguration.prepare(h.doc,
+    ['custom', null, {text:['hello', 'world'], mode:'repeat',
+      limit:{mode:'word', value:2}, pipeDelimiter:false}, false, false, 'english']);
+  assert.equal(text.value, 'hello world');
+  assert.deepEqual(h.clicks, ['change', 'simple', 'space', 'input']);
+  start();
+  assert.equal(h.clicks.at(-1), 'submit');
+});

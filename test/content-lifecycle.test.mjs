@@ -108,6 +108,38 @@ test('normal completion survives the interval where both panels are hidden',asyn
   h.result.shown=true;await h.changed();await h.changed();
   assert.equal(h.saves.length,1);assert.equal(h.saves[0].status,'completed');
 });
+
+test('in-place next updates exercise and URL before accepting the next trusted test', async () => {
+  const h = await harness(null, false, {nextLabel:'next', completed:false});
+  const send = h.context.chrome.runtime.sendMessage;
+  const training = {id:'next-exercise', words:Array(10).fill('street'), wordCount:10,
+    language:'english', layout:'default', kind:'words', targets:[], seconds:30};
+  const url = 'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=next&keyloomExercise=next-exercise';
+  h.context.chrome.runtime.sendMessage = message => message.type === 'NEXT_DAILY' ?
+    Promise.resolve({ok:true, url, training, testSettings:[]}) : send(message);
+  h.context.history = {replaceState(state, title, value) {h.context.location.href = value;}};
+  h.context.KeyloomConfiguration.prepare = async () => () => {
+    assert.equal(h.context.location.href, url);
+    h.mode.textContent = 'custom';
+    h.replaceWord();
+    h.typing.shown = true;
+    h.result.shown = false;
+  };
+  h.type('street');
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  await h.keyboard.commands.find(command => command.key === 'KeyN').run();
+  for (let index = 0; index < 10; index++) {
+    h.nextWord(index);
+    h.type('street');
+  }
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.equal(h.saves.length, 2);
+  assert.equal(h.saves[1].training.id, training.id);
+});
 test('word DOM replacement during the hidden transition is not a restart',async()=>{
   const h=await harness();h.type('street');h.typing.shown=false;h.replaceWord();await h.changed();
   assert.equal(h.saves.length,0);

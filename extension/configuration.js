@@ -37,7 +37,9 @@
     const language = languageNotice ? label(languageNotice.text).match(/^(english|russian)/)?.[1] : undefined;
     const timeMode = buttons.some(button => button.selected && label(button.text) === 'time');
     const duration = timeMode ? buttons.find(button => button.selected && /^\d+$/.test(label(button.text))) : null;
-    return { ok: true, language, ...(duration ? {configuredSeconds:Number(label(duration.text))} : {}) };
+    const configuredWordset = languageNotice ? label(languageNotice.text).replace(/ /g, '_') : undefined;
+    return { ok: true, language, configuredWordset,
+      ...(duration ? {configuredSeconds:Number(label(duration.text))} : {}) };
   }
   function read(doc) {
     const root = doc.querySelector('mount[data-component="testmodesnotice"]');
@@ -48,5 +50,72 @@
     const buttons = Array.from(doc.querySelectorAll('[data-ui-element="testConfig"] button, #testConfig button')).map(button => ({ text: button.textContent, selected: selected(button) }));
     return inspect({ notices, buttons });
   }
-  globalThis.KeyloomConfiguration = Object.freeze({ inspect, read, selected, label });
+  async function prepare(doc, settings) {
+    const current = read(doc);
+    const [mode, duration, custom, punctuation, numbers, wordset] = settings;
+    // Use the site's UI only; never touch account state or private page modules.
+    if (!current.ok || current.configuredWordset !== wordset ||
+      !['time', 'custom'].includes(mode)) {
+      return null;
+    }
+    const buttons = Array.from(doc.querySelectorAll(
+      '[data-ui-element="testConfig"] button, #testConfig button'));
+    const find = text => buttons.find(button => label(button.textContent) === text);
+    if (['punctuation', 'numbers'].some((name, index) =>
+      !find(name) || selected(find(name)) !== [punctuation, numbers][index])) {
+      return null;
+    }
+    const modeButton = find(mode);
+    if (!modeButton) {
+      return null;
+    }
+    if (mode === 'time') {
+      const timeButton = find(String(duration));
+      const next = doc.querySelector('#nextTestButton');
+      if (!timeButton || !next) {
+        return null;
+      }
+      return () => {
+        if (!selected(modeButton)) {
+          modeButton.click();
+        }
+        if (!selected(timeButton)) {
+          timeButton.click();
+        } else {
+          next.click();
+        }
+      };
+    }
+    if (!custom || custom.mode !== 'repeat' || custom.pipeDelimiter ||
+      custom.limit?.mode !== 'word' || custom.limit.value !== custom.text.length) {
+      return null;
+    }
+    if (!selected(modeButton)) {
+      modeButton.click();
+    }
+    const change = find('change');
+    if (!change) {
+      return null;
+    }
+    change.click();
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const modal = doc.querySelector('#CustomTextModal, #customTextPopup');
+      const text = modal?.querySelector('textarea');
+      const simple = Array.from(modal?.querySelectorAll('button') ?? [])
+        .find(button => label(button.textContent) === 'simple');
+      const space = Array.from(modal?.querySelectorAll('button') ?? [])
+        .find(button => label(button.textContent) === 'space');
+      const submit = modal?.querySelector('button[type="submit"]');
+      if (text && simple && space && submit && !text.disabled && !submit.disabled) {
+        simple.click();
+        space.click();
+        text.value = custom.text.join(' ');
+        text.dispatchEvent(new Event('input', {bubbles:true}));
+        return () => submit.click();
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    return null;
+  }
+  globalThis.KeyloomConfiguration = Object.freeze({ inspect, read, selected, label, prepare });
 })();
