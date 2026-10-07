@@ -202,7 +202,11 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       if (!daily || daily.layout !== settings.layout) throw new Error('План не найден для текущей раскладки');
       const step = daily.steps.find(row => !row.result);
       if (!step) throw new Error('Все шаги плана уже завершены');
-      if (continuing && step.startedAt) throw new Error('Следующий шаг уже запущен. Откройте план, чтобы повторить его');
+      // An in-place launch can fail after persistence. Retrying from the completed
+      // predecessor must return the same prepared step, never skip or regenerate it.
+      if (continuing && step.startedAt && message.inPlace !== true) {
+        throw new Error('Следующий шаг уже запущен. Откройте план, чтобы повторить его');
+      }
       const previousDailies = structuredClone(dailies);
       let url;
       let updatedExercises = exercises;
@@ -219,7 +223,9 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
         updatedExercises = [...exercises.filter(row => row.id !== plan.id), plan].slice(-40);
         url = KeyloomPractice.url(plan.words, plan.language, plan.id);
       }
-      step.startedAt = Date.now();
+      if (!(continuing && message.inPlace === true && step.startedAt)) {
+        step.startedAt = Date.now();
+      }
       await extensionApi.storage.local.set({dailies, exercises:updatedExercises});
       const destination = {url:url + '&keyloomDaily=' + encodeURIComponent(daily.id) +
         '&keyloomStep=' + encodeURIComponent(step.id)};

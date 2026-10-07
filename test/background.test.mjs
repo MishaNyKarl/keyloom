@@ -89,7 +89,12 @@ for (const firefox of [false, true]) {
     const replies = await Promise.all([h.send({type:'NEXT_DAILY', inPlace:true}, url),
       h.send({type:'NEXT_DAILY', inPlace:true}, url)]);
     const reply = replies.find(row => row.ok);
-    assert.equal(replies.filter(row => row.ok).length, 1);
+    assert.equal(replies.filter(row => row.ok).length, 2);
+    assert.deepEqual(structuredClone(replies[0]), structuredClone(replies[1]));
+    const prepared = structuredClone(h.storage.dailies[0].steps[1]);
+    const retry = await h.send({type:'NEXT_DAILY', inPlace:true}, url);
+    assert.deepEqual(structuredClone(retry), structuredClone(reply));
+    assert.deepEqual(h.storage.dailies[0].steps[1], prepared);
     assert.equal(h.updated.length, 0);
     assert.equal(reply.testSettings[0], 'custom');
     assert.equal(reply.training.id, h.storage.dailies[0].steps[1].exerciseId);

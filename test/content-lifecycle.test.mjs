@@ -140,6 +140,35 @@ test('in-place next updates exercise and URL before accepting the next trusted t
   assert.equal(h.saves.length, 2);
   assert.equal(h.saves[1].training.id, training.id);
 });
+
+for (const failure of ['history', 'silent-start']) {
+  test('next falls back to the prepared URL when in-place launch fails: ' + failure, async () => {
+    const h = await harness(null, false, {nextLabel:'next', completed:false});
+    const send = h.context.chrome.runtime.sendMessage;
+    const url = 'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=next';
+    const navigations = [];
+    h.context.location.assign = value => navigations.push(value);
+    h.context.history = {replaceState(state, title, value) {
+      if (failure === 'history') {
+        throw new Error('URL update rejected');
+      }
+      h.context.location.href = value;
+    }};
+    // Deterministic host transition clock: the result panel never disappears.
+    h.context.setTimeout = resolve => queueMicrotask(resolve);
+    h.context.KeyloomConfiguration.prepare = async () => () => {};
+    h.context.chrome.runtime.sendMessage = message => message.type === 'NEXT_DAILY' ?
+      Promise.resolve({ok:true, url, testSettings:[]}) : send(message);
+    h.type('street');
+    h.typing.shown = false;
+    h.result.shown = true;
+    await h.changed();
+    await h.keyboard.commands.find(command => command.key === 'KeyN').run();
+    assert.deepEqual(navigations, [url]);
+    assert.equal(h.saves.length, 1);
+    assert.equal(h.saves[0].status, 'completed');
+  });
+}
 test('word DOM replacement during the hidden transition is not a restart',async()=>{
   const h=await harness();h.type('street');h.typing.shown=false;h.replaceWord();await h.changed();
   assert.equal(h.saves.length,0);

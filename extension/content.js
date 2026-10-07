@@ -121,22 +121,34 @@
         location.assign(reply.url);
         return;
       }
-      // Update markers before restarting so the first trusted input uses the new exercise.
-      history.replaceState(null, '', reply.url);
-      trainingPlan = reply.training ?? null;
-      dailyState = null;
-      firstNode = null;
-      disabledForTest = false;
-      wordTargets = new WeakMap();
       try {
+        // Update markers before restarting so trusted input uses the new exercise.
+        // Firefox can reject URL updates; the persisted URL also recovers that case.
+        history.replaceState(null, '', reply.url);
+        trainingPlan = reply.training ?? null;
+        firstNode = null;
+        disabledForTest = false;
+        wordTargets = new WeakMap();
         start();
+        // Clicking a host control can silently do nothing (disabled/transitioning).
+        // Keep input blocked until the result is replaced by a ready test.
+        for (let attempt = 0; attempt < 30; attempt++) {
+          if (visible(document.querySelector('#typingTest')) &&
+            !visible(document.querySelector('#result'))) {
+            dailyState = null;
+            advancing = false;
+            status = 'Начните следующий тест';
+            paint();
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        location.assign(reply.url);
+        return;
       } catch {
         location.assign(reply.url);
         return;
       }
-      advancing = false;
-      status = 'Начните следующий тест';
-      paint();
     } catch (error) {
       advancing = false;
       status = 'Не удалось перейти: ' + error.message;
