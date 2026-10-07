@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
 // Executes the actual content script; only DOM and Chrome transport are simulated.
-async function harness(training=null, firefox=false, daily=null, today=null, deferSave=false) {
+async function harness(training=null, firefox=false, daily=null, today=null, deferSave=false,
+  resultMounted=true) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [];
@@ -46,7 +47,7 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   const doc = {body,hidden:false,
     addEventListener(name, cb) { callbacks[name]=cb; },
     createElement:()=> { const node = created.length ? element() : badge; created.push(node); return node; },
-    querySelector(selector) { reads.queries++; if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':result,'#wordsInput':input,'#words .word.active':active,'[data-ui-element="notifications"]':notifications,'#result .stats .info .bottom':resultInfo})[selector] ?? null; },
+    querySelector(selector) { reads.queries++; if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':resultMounted ? result : null,'#wordsInput':input,'#words .word.active':active,'[data-ui-element="notifications"]':notifications,'#result .stats .info .bottom':resultInfo})[selector] ?? null; },
     querySelectorAll:()=>[mode],
   };
   const context = vm.createContext({document:doc, URL, location:{pathname:'/',href:'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=step'}, crypto:webcrypto, performance:{now:()=>clock+=100},
@@ -89,6 +90,7 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   return {get keyboard(){return keyboard;},typing,result,badge,input,saves,type,changed,context,messages,mode,created,
     reads, frames, mutate, root, caret, notifications, callbacks, page, observers, resultInfo,
     resolveSave(reply) { resolveSave(reply); },
+    mountResult() { resultMounted = true; },
     mountFooter() {
       privacy = {nextElementSibling:null, after(node){this.nextElementSibling=node;}};
       return privacy;
@@ -436,6 +438,28 @@ test('caret animation, letter classes and unrelated subtrees schedule no work', 
   }
   assert.equal(h.frames.length, 0);
   assert.deepEqual(h.reads, before);
+});
+
+test('lazy result mounting leaves no document subtree observer during typing', async () => {
+  const h = await harness(null, true, null, null, false, false);
+  h.type('s');
+  const before = {...h.reads};
+  const letter = {parentElement:h.root.querySelector('.word.active')};
+  for (let index = 0; index < 100; index++) {
+    h.mutate([{target:letter, type:'childList', addedNodes:[]}]);
+  }
+  assert.equal(h.frames.length, 0);
+  assert.deepEqual(h.reads, before);
+  assert.equal(h.observers.some(observer =>
+    observer.targets.get(h.context.document.body)?.subtree), false);
+  h.type('treet');
+  h.typing.shown = false;
+  h.result.shown = true;
+  h.mountResult();
+  await h.changed([{target:h.page, type:'childList', addedNodes:[h.result]}]);
+  assert.equal(h.saves.length, 1);
+  assert.equal(h.saves[0].status, 'completed');
+  assert.equal(h.saves[0].presses, 6);
 });
 
 test('word restart before the next animation frame does not mix sessions', async () => {

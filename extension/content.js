@@ -284,7 +284,9 @@
     }
     // Only initial discovery needs a subtree observer. Never subscribe to the
     // stream of letter classes, extra letters and caret animation during a test.
-    if (wordsRoot && testPanel && resultPanel) {
+    // Monkeytype mounts #result lazily. Waiting for it keeps the document-wide
+    // observer alive through every typed letter; shallow ancestors detect its mount.
+    if (wordsRoot && testPanel) {
       bootstrapObserver?.disconnect();
       bootstrapObserver = null;
     } else if (!bootstrapObserver) {
