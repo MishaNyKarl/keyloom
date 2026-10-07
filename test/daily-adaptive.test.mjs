@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
 const context = vm.createContext({crypto:webcrypto, URL, TextEncoder, structuredClone});
-for (const name of ['core', 'analytics', 'learning', 'daily', 'words', 'vendor/lz-string']) {
+for (const name of ['core', 'analytics', 'learning', 'daily', 'words', 'configuration', 'vendor/lz-string']) {
   vm.runInContext(await readFile(new URL('../extension/' + name + '.js', import.meta.url), 'utf8'), context);
 }
 const {KeyloomDaily:d, KeyloomAnalytics:a} = context;
@@ -84,6 +84,34 @@ test('vocabulary credit requires the selected dictionary as well as mode, durati
   assert.equal(d.complete([plan], result, url, step.seconds)[0], plan);
   assert.equal(d.complete([plan], result, url, step.seconds, step.wordset)[0].steps[0].result.id,
     result.id);
+});
+
+test('Russian 375k launched from the plan is credited with the current notice DOM', () => {
+  const plan = d.create({languages:'russian'}, [], 'default', now, 'current-dom');
+  const step = plan.steps.find(row => row.wordset);
+  step.wordset = 'russian_375k';
+  step.startedAt = now;
+  plan.steps = [step];
+  const notice = {
+    textContent:'russian 375k',
+    querySelectorAll:() => [{classList:['fas', 'fa-globe-americas']}]
+  };
+  const panel = {querySelectorAll:() => [notice]};
+  const doc = {
+    querySelector:selector => selector === '#typingTest .fa-globe-americas' ?
+      {closest:() => ({parentElement:panel})} : null,
+    querySelectorAll:() => ['time', String(step.seconds)].map(textContent =>
+      ({textContent, getAttribute:() => 'true'}))
+  };
+  const config = context.KeyloomConfiguration.read(doc);
+  const result = {...session('russian', 69), id:'current-dom-result',
+    date:now + step.seconds * 1000, duration:step.seconds};
+  const url = new URL(d.nativeUrl(plan, step));
+  url.searchParams.set('keyloomDaily', plan.id);
+  url.searchParams.set('keyloomStep', step.id);
+  const completed = d.complete([plan], result, url.href,
+    config.configuredSeconds, config.configuredWordset);
+  assert.equal(completed[0].steps[0].result.id, result.id);
 });
 
 test('adaptive plans cover the core loads within every supported time and language budget', () => {

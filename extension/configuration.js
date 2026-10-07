@@ -42,7 +42,10 @@
       ...(duration ? {configuredSeconds:Number(label(duration.text))} : {}) };
   }
   function read(doc) {
-    const root = doc.querySelector('mount[data-component="testmodesnotice"]');
+    // Solid's current test page has no notice mount; the language control anchors
+    // its sibling notices inside typingTest. Keep the legacy mount compatible.
+    const root = doc.querySelector('mount[data-component="testmodesnotice"]') ??
+      doc.querySelector('#typingTest .fa-globe-americas')?.closest('button')?.parentElement;
     const notices = Array.from(root?.querySelectorAll('button') ?? []).map(button => ({
       text: button.textContent,
       icons: Array.from(button.querySelectorAll('[class]')).flatMap(icon => Array.from(icon.classList)).filter(c => c.startsWith('fa-')),

@@ -59,6 +59,23 @@ function launchDocument(mode = 'time', wordset = 'english') {
   return {doc, clicks};
 }
 
+test('current Monkeytype notice panel preserves the vocabulary and modifier checks', () => {
+  const notices = [button('russian 375k', [], ['fa-globe-americas'])];
+  const panel = {querySelectorAll:() => notices};
+  const languageButton = {parentElement:panel};
+  const icon = {closest:selector => selector === 'button' ? languageButton : null};
+  const doc = {
+    querySelector:selector => selector === '#typingTest .fa-globe-americas' ? icon : null,
+    querySelectorAll:() => [button('time', [], [], 'true'), button('120', [], [], 'true')]
+  };
+  assert.deepEqual(read(doc), {
+    ok:true, language:'russian', configuredWordset:'russian_375k', configuredSeconds:120
+  });
+  notices.push(button('stop on error', [], ['fa-hand-paper']));
+  assert.equal(read(doc).ok, false);
+  assert.match(read(doc).reason, /stop on error/);
+});
+
 test('in-place time launch restarts same duration and changes a different duration via controls', async () => {
   const h = launchDocument();
   const start = await KeyloomConfiguration.prepare(h.doc,
