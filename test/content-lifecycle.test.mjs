@@ -9,7 +9,7 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   resultMounted=true) {
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
-  const callbacks = {}, frames = [], saves = [];
+  const callbacks = {}, frames = [], saves = [], documentListeners = [];
   let storageListener, keyboard, resolveSave;
   let first, active, clock = 0, wordIndex=0, target='street';
   const observers = [];
@@ -24,7 +24,10 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
     contains(node){for(let n=node;n;n=n.parentElement){if(n===this)return true;}return false;},
     append(){},prepend(){} });
   const typing = element(), result = element(), badge = element(), resultInfo = element(); result.shown = false;
-  const input = {id:'wordsInput',value:' '};
+  let input = {id:'wordsInput',value:' ',
+    addEventListener(name, callback) { this[name] = callback; },
+    removeEventListener(name, callback) { if (this[name] === callback) delete this[name]; }};
+  callbacks.beforeinput = event => input.beforeinput?.(event);
   const newWord = () => {
     const index = wordIndex, text = target;
     const word = {getAttribute:()=> String(index), hasAttribute:()=>true,
@@ -44,13 +47,14 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   page.parentElement = body;
   typing.parentElement = page; result.parentElement = page;
   wrapper.parentElement = typing; root.parentElement = wrapper;
+  input.parentElement = wrapper;
   caret.parentElement = wrapper; notifications.parentElement = body;
   first.parentElement = root;
   const mode = {textContent:training?'custom':'words', getAttribute:()=>null};
   const created = [];
   let privacy = null;
   const doc = {body,hidden:false,
-    addEventListener(name, cb) { callbacks[name]=cb; },
+    addEventListener(name, cb) { documentListeners.push(name); callbacks[name]=cb; },
     createElement:()=> { const node = created.length ? element() : badge; created.push(node); return node; },
     querySelector(selector) { reads.queries++; if (selector.includes('privacy-policy.html')) return privacy; return ({'#words':root,'#typingTest':typing,'#result':resultMounted ? result : null,'#wordsInput':input,'#words .word.active':active,'[data-ui-element="notifications"]':notifications,'#result .stats .info .bottom':resultInfo})[selector] ?? null; },
     querySelectorAll:()=>[mode],
@@ -91,11 +95,19 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   const changed = async (records=[{target:typing,type:'attributes',attributeName:'class'}]) => {
     mutate(records); while(frames.length) frames.shift()(); await settle();
   };
-  const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed});input.value+=typed;} };
-  return {get keyboard(){return keyboard;},typing,result,badge,input,saves,type,changed,context,messages,mode,created,
-    reads, frames, mutate, root, caret, notifications, callbacks, page, observers, resultInfo,
+  const type = text => { for(const typed of text){callbacks.beforeinput({target:input,isTrusted:true,inputType:'insertText',data:typed,timeStamp:clock+=100});input.value+=typed;} };
+  return {get keyboard(){return keyboard;},typing,result,badge,get input(){return input;},saves,type,changed,context,messages,mode,created,
+    reads, frames, mutate, root, caret, notifications, callbacks, page, observers, resultInfo, documentListeners,
     resolveSave(reply) { resolveSave(reply); },
     mountResult() { resultMounted = true; },
+    replaceInput() {
+      const old = input;
+      input = {...input, value:' '};
+      old.isConnected = false;
+      input.isConnected = true;
+      delete input.beforeinput;
+      return old;
+    },
     mountFooter() {
       privacy = {nextElementSibling:null, after(node){this.nextElementSibling=node;}};
       return privacy;
@@ -139,7 +151,46 @@ test('initial state on account does not send a test-only page URL', async () => 
   assert.equal(h.messages.filter(message => message.type === 'GET_STATE').at(-1).pageUrl, undefined);
 });
 
-test('opt-in diagnostics measures capture and exports no input or route identifiers', async () => {
+test('capture is field-bound and replacement binds before the queued frame', async () => {
+  const h = await harness();
+  assert.equal(h.documentListeners.includes('beforeinput'), false);
+  const old = h.replaceInput();
+  h.mutate([{target:h.input.parentElement, type:'childList'}]);
+  assert.equal(old.beforeinput, undefined);
+  assert.equal(typeof h.input.beforeinput, 'function');
+  // No lifecycle RAF has run; first input still starts a complete session.
+  h.type('street');
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.equal(h.saves.length, 1);
+  assert.equal(h.saves[0].presses, 6);
+});
+
+test('steady trusted input uses event timestamps even with passive diagnostics', async () => {
+  const h = await harness();
+  h.keyboard.commands.find(row => row.label === 'Включить диагностику').run();
+  h.callbacks.beforeinput({target:h.input, isTrusted:true, inputType:'insertText', data:'s', timeStamp:1000});
+  h.input.value += 's';
+  const now = h.context.performance.now;
+  h.context.performance.now = () => { throw new Error('Hot path must not read the clock'); };
+  h.callbacks.beforeinput({target:{id:'wordsInput',value:' '}, isTrusted:true,
+    inputType:'insertText', data:'x', timeStamp:1050});
+  h.callbacks.beforeinput({target:h.input, isTrusted:false,
+    inputType:'insertText', data:'x', timeStamp:1050});
+  h.callbacks.beforeinput({target:h.input, isTrusted:true,
+    inputType:'insertText', data:'t', timeStamp:1100});
+  h.input.value += 't';
+  h.context.performance.now = now;
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  assert.equal(h.saves.length, 1);
+  assert.equal(h.saves[0].presses, 2);
+  assert.equal(h.saves[0].duration, .1);
+});
+
+test('passive diagnostics exports counters without timers or input/route identifiers', async () => {
   const h = await harness();
   const timers = [];
   const blobs = [];
@@ -160,23 +211,26 @@ test('opt-in diagnostics measures capture and exports no input or route identifi
   const command = label => h.keyboard.commands.find(row => row.label === label);
   assert.equal(command('Скачать диагностику').available(), false);
   command('Включить диагностику').run();
+  assert.equal(timers.length, 0);
   h.type('street');
   h.typing.shown = false;
   h.result.shown = true;
   await h.changed();
-  timers.shift()();
   h.context.document.hidden = true;
   h.callbacks.visibilitychange();
   h.context.document.hidden = false;
   h.callbacks.visibilitychange();
-  timers.shift()();
   command('Скачать диагностику').run();
   const serialized = await blobs[0].text();
   const report = JSON.parse(serialized);
-  assert.equal(report.metrics.inputHandlers.count, 6);
+  assert.equal(report.format, 2);
+  assert.equal(report.captureTiming, 'not-measured');
+  assert.equal(report.eventLoopSampling, false);
+  assert.equal(report.metrics.inputEvents.count, 6);
   assert.equal(report.metrics.activeWordQueries.count, 1);
   assert.equal(report.metrics.analysis.count, 1);
-  assert.equal(report.metrics.eventLoopDelay.count, 1);
+  assert.equal(report.metrics.eventLoopDelay, undefined);
+  assert.equal(timers.length, 1); // Only deferred Blob URL cleanup after download.
   assert.equal(report.tests[0].saved, true);
   assert.deepEqual(downloads, ['keyloom-diagnostics.json']);
   assert.doesNotMatch(serialized, /street|monkeytype\.com|keyloomDaily|keyloomStep|pageUrl/);

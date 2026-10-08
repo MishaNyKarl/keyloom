@@ -15,9 +15,9 @@
   let lifecycleObserver, bootstrapObserver, observedFirst;
   let observedNodes = new Map(), wordTargets = new WeakMap();
   let activeWord = null;
+  let inputRoot = null;
   let diagnostics = null;
   let lastDiagnostics = null;
-  let visibilityGeneration = 0;
   function metric(name, elapsed = 0) {
     if (!diagnostics) return;
     const row = diagnostics.metrics[name] ??= {count:0, totalMs:0, maxMs:0, over16Ms:0};
@@ -36,20 +36,8 @@
       started:performance.now(), metrics:{}, events:[], tests:[], mutationRecords:0};
     diagnostics = report;
     lastDiagnostics = report;
-    // Opt-in sampling ends after ten minutes. No input, URLs or account data.
-    function pulse() {
-      const due = performance.now() + 250;
-      const generation = visibilityGeneration;
-      setTimeout(() => {
-        if (diagnostics !== report) return;
-        if (!document.hidden && generation === visibilityGeneration) {
-          metric('eventLoopDelay', Math.max(0, performance.now() - due));
-        }
-        if (performance.now() - report.started < 600000) pulse();
-        else diagnosticEvent('sampling-ended');
-      }, 250);
-    }
-    pulse();
+    // Passive counters only: no timer or per-keystroke stopwatch. Browser
+    // stack sampling belongs to Firefox Profiler, outside this adapter.
     status = 'Диагностика включена · пройдите тест и скачайте отчёт через Alt+K';
     paint();
   }
@@ -57,7 +45,8 @@
     const snapshot = diagnostics ?? lastDiagnostics;
     if (!snapshot) return;
     const {version, metrics, events, tests, mutationRecords, started} = snapshot;
-    const report = {format:1, version, durationMs:performance.now() - started,
+    const report = {format:2, version, captureTiming:'not-measured',
+      eventLoopSampling:false, durationMs:performance.now() - started,
       metrics, events, tests, mutationRecords};
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)],
       {type:'application/json'}));
@@ -379,13 +368,22 @@
       check();
     });
   }
+  function bindInput() {
+    const nextInput = document.querySelector('#wordsInput');
+    if (nextInput !== inputRoot) {
+      inputRoot?.removeEventListener('beforeinput', capture, true);
+      inputRoot = nextInput;
+      inputRoot?.addEventListener('beforeinput', capture, true);
+    }
+  }
   function bindLifecycle() {
+    bindInput();
     wordsRoot = document.querySelector('#words');
     testPanel = document.querySelector('#typingTest');
     resultPanel = document.querySelector('#result');
     notificationRoot = document.querySelector('[data-ui-element="notifications"]');
     const nodes = new Map();
-    for (const root of [wordsRoot, testPanel, resultPanel, notificationRoot]) {
+    for (const root of [wordsRoot, testPanel, resultPanel, notificationRoot, inputRoot?.parentElement]) {
       for (let node = root; node; node = node.parentElement) nodes.set(node, 'container');
     }
     nodes.set(document.body, 'container');
@@ -408,15 +406,21 @@
     // stream of letter classes, extra letters and caret animation during a test.
     // Monkeytype mounts #result lazily. Waiting for it keeps the document-wide
     // observer alive through every typed letter; shallow ancestors detect its mount.
-    if (wordsRoot && testPanel) {
+    if (wordsRoot && testPanel && inputRoot) {
       bootstrapObserver?.disconnect();
       bootstrapObserver = null;
     } else if (!bootstrapObserver) {
-      bootstrapObserver = new MutationObserver(queueCheck);
+      bootstrapObserver = new MutationObserver(() => {
+        if (!inputRoot || inputRoot.isConnected === false) bindInput();
+        queueCheck();
+      });
       bootstrapObserver.observe(document.body, {childList:true, subtree:true});
     }
   }
   function onLifecycleMutation(records) {
+    // Rebind before the next animation frame, so a newly mounted input cannot
+    // lose its first trusted keystroke while a lifecycle check is queued.
+    if (!inputRoot || inputRoot.isConnected === false) bindInput();
     metric('mutationBatches');
     if (diagnostics) diagnostics.mutationRecords = (diagnostics.mutationRecords ?? 0) + records.length;
     let changed = false;
@@ -447,18 +451,16 @@
     if (changed) queueCheck();
   }
   function capture(event) {
-    if (!diagnostics || event.target?.id !== 'wordsInput' || !event.isTrusted) {
-      return captureInput(event);
-    }
-    const start = performance.now();
-    try { return captureInput(event); }
-    finally { metric('inputHandlers', performance.now() - start); }
+    if (event.target !== inputRoot || !event.isTrusted) return;
+    metric('inputEvents');
+    return captureInput(event);
   }
   function captureInput(event) {
     if (event.target?.id !== 'wordsInput' || !settings.enabled || !event.isTrusted || advancing) return;
     // Timestamp before DOM work so the adapter's own cost is not counted as
     // typing time. Layout and UI work belong to lifecycle transitions only.
-    const time = performance.now();
+    const time = Number.isFinite(event.timeStamp) && event.timeStamp > 0 ?
+      event.timeStamp : performance.now();
     const replaced = wordsRoot?.firstElementChild !== observedFirst;
     if ((!session && !disabledForTest) || replaced || (session && location.pathname !== session.path)) {
       check();
@@ -511,9 +513,7 @@
       wordIndex, target,
       position: [...value.slice(1)].length, typed: event.data ?? '' });
   }
-  document.addEventListener('beforeinput', capture, true);
   document.addEventListener('visibilitychange', () => {
-    visibilityGeneration++;
     if (!document.hidden) void refreshProgress();
     if (document.hidden && session) {
       const last = session.events.at(-1);
