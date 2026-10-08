@@ -148,6 +148,19 @@ test('in-place next updates exercise and URL before accepting the next trusted t
   assert.equal(h.saves[1].training.id, training.id);
 });
 
+test('saving uses the route captured at test start even after a later URL change', async () => {
+  const h = await harness();
+  const original = h.context.location.href;
+  h.type('street');
+  h.context.location.href = 'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=later';
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  const saved = h.messages.find(message => message.type === 'SAVE_SESSION');
+  assert.equal(saved.pageUrl, original);
+  assert.equal(saved.session.pageUrl, undefined);
+});
+
 for (const failure of ['history', 'silent-start']) {
   test('next falls back to the prepared URL when in-place launch fails: ' + failure, async () => {
     const h = await harness(null, false, {nextLabel:'next', completed:false});
