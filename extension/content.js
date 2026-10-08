@@ -14,9 +14,12 @@
   let testVisible = false, resultVisible = false;
   let lifecycleObserver, bootstrapObserver, observedFirst;
   let observedNodes = new Map(), wordTargets = new WeakMap();
+  let activeWord = null;
   const send = async message => {
     try {
-      const reply = await extensionApi.runtime.sendMessage(message);
+      const routed = ['GET_STATE', 'SAVE_SESSION', 'NEXT_DAILY'].includes(message.type);
+      const reply = await extensionApi.runtime.sendMessage(routed ?
+        {pageUrl:location.href, ...message} : message);
       if (!reply?.ok) throw new Error(reply?.error ?? 'Нет связи с расширением');
       return reply;
     } catch (error) { status = 'Не сохранено · обновите вкладку'; paint(); throw error; }
@@ -129,6 +132,7 @@
         firstNode = null;
         disabledForTest = false;
         wordTargets = new WeakMap();
+        activeWord = null;
         start();
         // Clicking a host control can silently do nothing (disabled/transitioning).
         // Keep input blocked until the result is replaced by a ready test.
@@ -188,7 +192,8 @@
     paint();
     pendingSave=send({ type: 'SAVE_SESSION', session: result,
       configuredSeconds:finished.configuredSeconds,
-      configuredWordset:finished.configuredWordset }).then(reply => {
+      configuredWordset:finished.configuredWordset,
+      pageUrl:finished.pageUrl }).then(reply => {
       const requested = queuedAdvanceId === result.id;
       if (savingId === result.id) savingId = null;
       if (requested) queuedAdvanceId = null;
@@ -244,6 +249,7 @@
       disabledForTest = false;
       firstNode = first;
       wordTargets = new WeakMap();
+      activeWord = null;
       if (!session) status = 'Готов к тесту';
     }
     if (session && !testVisible) status = queuedAdvanceId ?
@@ -277,7 +283,8 @@
         lifecycleObserver.observe(node, {
           childList: true,
           subtree: kind === 'notifications',
-          ...(kind === 'container' ? {attributes:true, attributeFilter:['class', 'style', 'hidden']} : {})
+          ...(kind === 'container' ? {attributes:true, attributeOldValue:true,
+            attributeFilter:['class', 'style', 'hidden']} : {})
         });
       }
       observedNodes = nodes;
@@ -312,6 +319,12 @@
         continue;
       }
       if (record.target === wordsRoot && wordsRoot.firstElementChild === observedFirst) continue;
+      if (record.type === 'attributes' && record.attributeName === 'style') {
+        const hiddenStyle = text => /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:;|$)/i.test(text ?? '');
+        if (hiddenStyle(record.oldValue) === hiddenStyle(record.target.getAttribute('style'))) {
+          continue;
+        }
+      }
       changed = true;
     }
     if (changed) queueCheck();
@@ -327,7 +340,10 @@
     }
     if (disabledForTest) return;
     if (!testVisible || resultVisible || session?.abortReason) return;
-    const node = wordsRoot?.querySelector('.word.active');
+    if (!activeWord?.classList.contains('active') || activeWord.isConnected === false) {
+      activeWord = wordsRoot?.querySelector('.word.active');
+    }
+    const node = activeWord;
     if (!node) return;
     if (event.isComposing || event.inputType?.includes('Composition') || event.inputType === 'insertFromPaste') {
       session = null; disabledForTest = true; status = 'IME / вставка · тест пропущен'; paint(); return;
@@ -352,6 +368,7 @@
       if (node.getAttribute('data-wordindex') !== '0' || value !== ' ' || deleting) { status = 'Начните новый тест'; paint(); return; }
       queuedAdvanceId = null;
       session = { id: crypto.randomUUID(), date: Date.now(), path: location.pathname,
+        pageUrl:location.href,
         configuredSeconds:configuration.configuredSeconds, configuredWordset:configuration.configuredWordset,
         language: trainingPlan?.language ?? configuration.language ?? (/[а-яё]/iu.test(target) ? 'russian' : 'english'),
         layout: settings.layout, mode: testMode, events: [] };

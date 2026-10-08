@@ -101,6 +101,16 @@ for (const firefox of [false, true]) {
     await h.send({type:'RESUME_TODAY'}, reply.url);
     const resumed = await h.send({type:'GET_STATE'}, h.updated.at(-1).url);
     assert.deepEqual(structuredClone(resumed.training), structuredClone(reply.training));
+    const nextStep = h.storage.dailies[0].steps[1];
+    const completed = await h.send({type:'SAVE_SESSION', pageUrl:reply.url,
+      session:{...h.session('next-after-history'), mode:'custom',
+        date:nextStep.startedAt + 1, duration:30,
+        training:{id:reply.training.id, kind:'words', targets:[], seconds:30}}}, url);
+    assert.equal(completed.dailyStep, 'completed');
+    for (const pageUrl of ['https://example.com/', 'https://monkeytype.com/settings',
+      123, 'https://monkeytype.com/' + 'x'.repeat(16384)]) {
+      assert.equal((await h.send({type:'NEXT_DAILY', inPlace:true, pageUrl}, url)).ok, false);
+    }
   });
 }
 test('concurrent tabs cannot overwrite each other or duplicate results', async () => {

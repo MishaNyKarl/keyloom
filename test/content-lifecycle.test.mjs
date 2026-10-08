@@ -13,7 +13,7 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   let storageListener, keyboard, resolveSave;
   let first, active, clock = 0, wordIndex=0, target='street';
   const observers = [];
-  const reads = {layout:0, target:0, panel:0, queries:0};
+  const reads = {layout:0, target:0, panel:0, queries:0, active:0};
   const messages=[];
   const element = () => ({ shown:true, style:{},textContent:'', attributes:new Map(), attributeWrites:0,
     closest(selector) { return selector === '.hidden' && !this.shown ? this : null; },
@@ -27,12 +27,17 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   const input = {id:'wordsInput',value:' '};
   const newWord = () => {
     const index = wordIndex, text = target;
-    return {getAttribute:()=> String(index), hasAttribute:()=>true,
+    const word = {getAttribute:()=> String(index), hasAttribute:()=>true,
+      classList:{contains:name => name === 'active' && active === word},
       querySelectorAll:()=>{reads.target++;return [...text].map(textContent=>({textContent}));}};
+    return word;
   };
   first = newWord();
   active = first;
-  const root = {querySelector:selector=>selector === '.word.active' ? active : first,
+  const root = {querySelector:selector=> {
+    if (selector === '.word.active') { reads.active++; return active; }
+    return first;
+  },
     get firstElementChild(){return first;}};
   const notifications = element();
   const body = element(), page = element(), wrapper = element(), caret = element();
@@ -417,6 +422,7 @@ test('steady typing does not read layout, reread letters or touch the panel', as
   assert.equal(h.reads.layout, before.layout);
   assert.equal(h.reads.target, before.target);
   assert.equal(h.reads.panel, before.panel);
+  assert.equal(h.reads.active, before.active);
   assert.equal(h.frames.length, 0);
   h.nextWord(1, 'strong'); h.type('strong');
   assert.equal(h.reads.target, before.target + 1);
@@ -428,8 +434,8 @@ test('steady typing does not read layout, reread letters or touch the panel', as
 
 test('caret animation, letter classes and unrelated subtrees schedule no work', async () => {
   const h = await harness(); h.type('s');
-  const before = {...h.reads};
   const letter = {parentElement:h.root.querySelector('.word.active')};
+  const before = {...h.reads};
   const unrelated = {parentElement:h.context.document.body};
   for (let i = 0; i < 100; i++) {
     h.mutate([{target:h.caret,type:'attributes',attributeName:'style'},
@@ -443,8 +449,8 @@ test('caret animation, letter classes and unrelated subtrees schedule no work', 
 test('lazy result mounting leaves no document subtree observer during typing', async () => {
   const h = await harness(null, true, null, null, false, false);
   h.type('s');
-  const before = {...h.reads};
   const letter = {parentElement:h.root.querySelector('.word.active')};
+  const before = {...h.reads};
   for (let index = 0; index < 100; index++) {
     h.mutate([{target:letter, type:'childList', addedNodes:[]}]);
   }
@@ -460,6 +466,25 @@ test('lazy result mounting leaves no document subtree observer during typing', a
   assert.equal(h.saves.length, 1);
   assert.equal(h.saves[0].status, 'completed');
   assert.equal(h.saves[0].presses, 6);
+});
+
+test('ancestor opacity animation schedules no layout work but display changes finish a test', async () => {
+  const h = await harness();
+  h.type('street');
+  const before = {...h.reads};
+  h.typing.attributes.set('style', 'opacity: 0.95; font-size: 2rem');
+  for (let index = 0; index < 100; index++) {
+    h.mutate([{target:h.typing, type:'attributes', attributeName:'style',
+      oldValue:'opacity: 1; font-size: 2rem'}]);
+  }
+  assert.equal(h.frames.length, 0);
+  assert.equal(h.reads.layout, before.layout);
+  h.typing.attributes.set('style', 'display: none;');
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed([{target:h.typing, type:'attributes', attributeName:'style',
+    oldValue:'opacity: 0.95; font-size: 2rem'}]);
+  assert.equal(h.saves[0].status, 'completed');
 });
 
 test('word restart before the next animation frame does not mix sessions', async () => {

@@ -79,6 +79,18 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     return true;
   }
   queue = queue.catch(() => {}).then(async () => {
+    let pageUrl = sender.url;
+    if (fromMonkeytype && message.pageUrl !== undefined) {
+      if (typeof message.pageUrl !== 'string' || message.pageUrl.length > 16384) {
+        throw new Error('Некорректный адрес теста');
+      }
+      const route = new URL(message.pageUrl);
+      if (route.origin !== 'https://monkeytype.com' || route.pathname !== '/' ||
+        new URL(sender.url).pathname !== '/') {
+        throw new Error('Некорректный адрес теста');
+      }
+      pageUrl = route.href;
+    }
     const { sessions = [], settings = defaults, exercises = [], learning: savedLearning,
       dailies: savedDailies = [], dailyPrefs, theme } = await extensionApi.storage.local.get(['sessions', 'settings','exercises', 'learning', 'dailies', 'dailyPrefs', 'theme']);
     let dailies = savedDailies;
@@ -111,24 +123,24 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       return {today:KeyloomDaily.todaySummary(dailies, settings.layout)};
     }
     if (message.type === 'GET_STATE') {
-      const id=fromMonkeytype?new URL(sender.url).searchParams.get('keyloomExercise'):null;
+      const id=fromMonkeytype?new URL(pageUrl).searchParams.get('keyloomExercise'):null;
       const { syncConfig, syncStatus } = fromExtension
         ? await extensionApi.storage.local.get(['syncConfig', 'syncStatus']) : {};
       const sync = { enabled: Boolean(syncConfig?.enabled), url: syncConfig?.url ?? '', ...syncStatus };
-      return { theme, today:KeyloomDaily.todaySummary(dailies, settings.layout), sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null, daily:dailyContinuation(dailies, sender.url)}) };
+      return { theme, today:KeyloomDaily.todaySummary(dailies, settings.layout), sessions: fromExtension ? sessions : [], settings, ...(fromExtension?{exercises,sync,learning,dailies,dailyPrefs}:{training:exercises.find(p=>p.id===id)??null, daily:dailyContinuation(dailies, pageUrl)}) };
     }
     if (message.type === 'SAVE_SESSION' && fromMonkeytype) {
       if (!settings.enabled) return { ignored: true };
       const incoming={...message.session};
       if(incoming.training){
-        const id=new URL(sender.url).searchParams.get('keyloomExercise');
+        const id=new URL(pageUrl).searchParams.get('keyloomExercise');
         const plan=exercises.find(p=>p.id===id&&p.id===incoming.training.id&&p.language===incoming.language&&p.layout===incoming.layout);
         if(!plan||incoming.mode!=='custom') delete incoming.training;
         else incoming.training={id:plan.id,targets:plan.targets,kind:plan.kind,seconds:plan.seconds,...(plan.wordCount ? {wordCount:plan.wordCount} : {})};
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
       const accepted = next.find(row => row.id === incoming.id);
-      let updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, sender.url,
+      let updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, pageUrl,
         message.configuredSeconds, message.configuredWordset) : dailies;
       const newlyCompleted = updatedDailies.some(plan => plan.steps.every(step => step.result) &&
         dailies.find(previous => previous.id === plan.id)?.steps.some(step => !step.result));
@@ -152,16 +164,16 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
         } catch { /* The saved result remains available in daily plan history. */ }
       }
       let dailyStep;
-      if (new URL(sender.url).searchParams.has('keyloomDaily')) {
+      if (new URL(pageUrl).searchParams.has('keyloomDaily')) {
         dailyStep = updatedDailies.some(plan => plan.steps.some(step => step.result?.id === incoming.id)) ? 'completed' : 'mismatch';
       }
-      return { saved: true, dailyStep, daily:dailyContinuation(updatedDailies, sender.url) };
+      return { saved: true, dailyStep, daily:dailyContinuation(updatedDailies, pageUrl) };
     }
     if (message.type === 'OPEN_DASHBOARD') {
       const result=sessions.find(s=>s.id===message.sessionId);
       const dailyResult = dailies.some(plan => plan.steps.some(step => step.result?.id === result?.id && result));
       const dailyView = message.view === 'daily' && (fromExtension ||
-        dailies.some(plan => plan.id === new URL(sender.url).searchParams.get('keyloomDaily')));
+        dailies.some(plan => plan.id === new URL(pageUrl).searchParams.get('keyloomDaily')));
       let suffix = '';
       if (dailyResult || dailyView) suffix = '#daily';
       else if (result) suffix = '?session=' + encodeURIComponent(result.id) + '&language=' + result.language + '#practice';
@@ -194,8 +206,8 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
     }
     if (message.type === 'START_DAILY' || continuing || resuming) {
       if (!settings.enabled) throw new Error('Включите запись тестов перед тренировкой');
-      const params = continuing ? new URL(sender.url).searchParams : null;
-      if (continuing && (!Number.isInteger(sender.tab?.id) || !dailyContinuation(dailies, sender.url))) {
+      const params = continuing ? new URL(pageUrl).searchParams : null;
+      if (continuing && (!Number.isInteger(sender.tab?.id) || !dailyContinuation(dailies, pageUrl))) {
         throw new Error('Сначала завершите текущий шаг плана');
       }
       const daily = todayPlan ?? dailies.find(plan => plan.id === (continuing ? params.get('keyloomDaily') : message.id));
