@@ -128,6 +128,7 @@
     if (widget.isConnected === false) document.body.append(widget);
     if (progressPanel.isConnected === false) document.body.append(progressPanel);
     setAttributeIfChanged(widget, 'data-typing', String(Boolean(session)));
+    setAttributeIfChanged(progressPanel, 'data-typing', String(Boolean(session)));
     if (widget.inert !== Boolean(session)) widget.inert = Boolean(session);
     setAttributeIfChanged(widget, 'data-keyloom-theme', ['dark', 'light', 'repose-dark', 'lime', 'honey', 'dualshot', 'trackday'].includes(theme) ? theme : 'dark');
     setAttributeIfChanged(progressPanel, 'data-keyloom-theme', theme);
@@ -339,6 +340,12 @@
     // Monkeytype hides typing before asynchronously revealing results. The gap is
     // not a cancellation signal, regardless of animation/calculation duration.
     if (resultVisible) {
+      // Mark the known spacer once at results, avoiding body-wide CSS :has()
+      // dependencies on every host letter/class/child mutation while typing.
+      const ad = document.querySelector('#ad-result-wrapper');
+      if (ad?.parentElement?.classList.contains('full-width')) {
+        setAttributeIfChanged(ad.parentElement, 'data-keyloom-result-ad', 'true');
+      }
       const info = document.querySelector('#result .stats .info .bottom');
       const text = info?.textContent ?? '';
       if (session && visible(info) && /failed\s*\(|bailed out|afk detected/i.test(text)) {

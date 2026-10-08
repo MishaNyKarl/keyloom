@@ -418,6 +418,7 @@ test('keyboard continuation shares button safeguards and is unavailable during t
 test('persistent controls stay separate from privacy and become inert during typing', async () => {
   const h = await harness();
   const widget = h.created.find(node => node.id === 'keyloom-widget');
+  const progress = h.created.find(node => node.id === 'keyloom-progress');
   const privacy = h.mountFooter();
   await h.changed();
   assert.equal(privacy.nextElementSibling, null);
@@ -425,10 +426,45 @@ test('persistent controls stay separate from privacy and become inert during typ
   h.type('st');
   assert.equal(widget.open, undefined);
   assert.equal(widget.inert, true);
+  assert.equal(widget.getAttribute('data-typing'), 'true');
+  assert.equal(progress.getAttribute('data-typing'), 'true');
   h.typing.shown = false;
   h.result.shown = true;
   await h.changed();
   assert.equal(widget.inert, false);
+  assert.equal(widget.getAttribute('data-typing'), 'false');
+  assert.equal(progress.getAttribute('data-typing'), 'false');
+});
+
+test('only the known result ad spacer is marked, once after typing ends', async () => {
+  const h = await harness();
+  const attributes = new Map();
+  let writes = 0;
+  let wide = true;
+  const spacer = {classList:{contains:name => wide && name === 'full-width'},
+    getAttribute:name => attributes.get(name) ?? null,
+    setAttribute(name, value) { writes++; attributes.set(name, value); }};
+  const query = h.context.document.querySelector;
+  h.context.document.querySelector = selector => selector === '#ad-result-wrapper' ?
+    {parentElement:spacer} : query(selector);
+  h.type('street');
+  assert.equal(writes, 0);
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  await h.changed();
+  assert.equal(attributes.get('data-keyloom-result-ad'), 'true');
+  assert.equal(writes, 1);
+  attributes.clear();
+  wide = false;
+  await h.changed();
+  assert.equal(writes, 1);
+});
+
+test('content CSS avoids relational subtree selectors and removes typing widgets from rendering', async () => {
+  const css = await readFile(new URL('../extension/keyboard.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /:has\(/);
+  assert.match(css, /#keyloom-widget\[data-typing=true\],\s*#keyloom-progress\[data-typing=true\]\s*\{\s*display:\s*none;/);
 });
 
 test('today plan badge shows counts and estimated minutes without a linked test', async () => {
