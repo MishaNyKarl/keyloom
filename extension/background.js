@@ -85,8 +85,9 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
         throw new Error('Некорректный адрес теста');
       }
       const route = new URL(message.pageUrl);
-      if (route.origin !== 'https://monkeytype.com' || route.pathname !== '/' ||
-        new URL(sender.url).pathname !== '/') {
+      // sender.url can retain /account after the host's SPA navigation to a test.
+      // Sender ID/origin is checked above; only the current test route needs '/'.
+      if (route.origin !== 'https://monkeytype.com' || route.pathname !== '/') {
         throw new Error('Некорректный адрес теста');
       }
       pageUrl = route.href;

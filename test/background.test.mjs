@@ -5,6 +5,18 @@ import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 
 for (const firefox of [false, true]) {
+  test('test capture after SPA return from account accepts the current root route: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const sender = 'https://monkeytype.com/account';
+    const pageUrl = 'https://monkeytype.com/';
+    assert.equal((await h.send({type:'GET_STATE', pageUrl}, sender)).ok, true);
+    const reply = await h.send({type:'SAVE_SESSION', pageUrl, session:h.session('returned')}, sender);
+    assert.equal(reply.saved, true);
+    assert.equal(h.storage.sessions.length, 1);
+    assert.equal((await h.send({type:'SAVE_SESSION', pageUrl:sender,
+      session:h.session('account-field')}, sender)).ok, false);
+    assert.equal(h.storage.sessions.length, 1);
+  });
   test('aborted lesson keeps 14/32 progress and remaining minutes unchanged: ' + firefox, async () => {
     const h = await harness(firefox);
     const api = h.context[firefox ? 'browser' : 'chrome'];
