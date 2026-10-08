@@ -581,13 +581,27 @@
       // send() already displays the connection error in the status panel.
     }
   }
-  extensionApi.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    if (changes.dailies || changes.settings) void refreshProgress();
-    if (changes.theme) { theme = changes.theme.newValue; paint(); }
-    if (!changes.settings) return;
+  extensionApi.runtime.onMessage.addListener((message, sender) => {
+    if (sender.id !== extensionApi.runtime.id || message?.type !== 'KEYLOOM_STATE_CHANGED') return;
+    if (Object.hasOwn(message, 'today')) {
+      const today = message.today;
+      if (today === null || (today && ['done', 'total', 'minutes'].every(key =>
+        Number.isSafeInteger(today[key]) && today[key] >= 0 && today[key] <= 100000) &&
+        today.done <= today.total)) {
+        todayProgress = today === null ? null : {
+          done: today.done, total: today.total, minutes: today.minutes,
+        };
+        paint();
+      }
+    }
+    if (typeof message.theme === 'string' && message.theme.length <= 64) {
+      theme = message.theme;
+      paint();
+    }
+    if (!message.settings || typeof message.settings.enabled !== 'boolean' ||
+      !['default', 'alternate'].includes(message.settings.layout)) return;
     queuedAdvanceId = null;
-    settings = changes.settings.newValue;
+    settings = { enabled: message.settings.enabled, layout: message.settings.layout };
     session = null; status = settings.enabled ? 'Начните новый тест' : 'На паузе'; paint();
   });
 })();

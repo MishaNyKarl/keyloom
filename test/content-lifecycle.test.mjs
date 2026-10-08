@@ -10,7 +10,8 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
   const source = await readFile(new URL('../extension/content.js', import.meta.url), 'utf8');
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const callbacks = {}, frames = [], saves = [], documentListeners = [];
-  let storageListener, keyboard, resolveSave;
+  let stateListener, keyboard, resolveSave;
+  let storageSubscriptions = 0;
   let first, active, clock = 0, wordIndex=0, target='street';
   const observers = [];
   const reads = {layout:0, target:0, panel:0, queries:0, active:0};
@@ -71,12 +72,12 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
     },
     KeyloomKeyboard:{create(options){keyboard=options;return {open(){}};}},
     KeyloomConfiguration:{selected:()=>true,read:()=>({ok:true})},
-    chrome:{runtime:{getManifest:()=>({version:'1.0.8'}),async sendMessage(message){
+    chrome:{runtime:{id:'test-extension',onMessage:{addListener(callback){stateListener=callback;}},getManifest:()=>({version:'1.0.8'}),async sendMessage(message){
       messages.push(message);
       if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training,today};
       if(message.type==='SAVE_SESSION'){saves.push(message.session);if(deferSave)return new Promise(resolve=>{resolveSave=resolve;});return {ok:true,saved:true,daily};}
       return {ok:true};
-    }},storage:{onChanged:{addListener(callback){storageListener=callback;}}}},
+    }},storage:{onChanged:{addListener(){storageSubscriptions++;}}}},
   });
   if (firefox) { context.browser = context.chrome; delete context.chrome; }
   vm.runInContext(core,context); vm.runInContext(source,context);
@@ -112,7 +113,11 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
       privacy = {nextElementSibling:null, after(node){this.nextElementSibling=node;}};
       return privacy;
     },
-    changeTheme(theme){storageListener({theme:{newValue:theme}},'local');},
+    get storageSubscriptions(){return storageSubscriptions;},
+    notifyState(message, id='test-extension') {
+      stateListener({type:'KEYLOOM_STATE_CHANGED',...message},{id});
+    },
+    changeTheme(theme){stateListener({type:'KEYLOOM_STATE_CHANGED',theme},{id:'test-extension'});},
     nextWord(index,text='street'){wordIndex=index;target=text;input.value=' ';active=newWord();active.parentElement=root;if(index===0)first=active;},
     async clickBadge(){badge.click();await settle();},
     replaceWord(){wordIndex=0;first=newWord();active=first;first.parentElement=root;input.value=' ';},
@@ -718,4 +723,36 @@ test('removing old lines does not trigger layout reads on subsequent letters', a
   h.typing.shown = false; h.result.shown = true; await h.changed();
   assert.equal(h.saves.length, 1);
   assert.equal(h.saves[0].status, 'completed');
+});
+
+test('typing page uses compact state messages without subscribing to storage histories', async () => {
+  const h = await harness();
+  assert.equal(h.storageSubscriptions,0);
+  h.type('str');
+  const before = h.messages.length;
+  h.notifyState({today:{done:4,total:30,minutes:18}});
+  h.type('eet');
+  h.typing.shown=false;h.result.shown=true;
+  await h.changed();
+  assert.equal(h.saves.length,1);
+  assert.equal(h.saves[0].status,'completed');
+  assert.equal(h.messages.slice(before).filter(row=>row.type==='GET_TODAY_PROGRESS').length,0);
+  assert.ok(h.created.some(node=>node.textContent.includes('4 / 30')));
+});
+
+test('state notifications enforce sender and settings while keeping pause behavior', async () => {
+  const h = await harness();
+  h.notifyState({settings:{enabled:false,layout:'default'}},'another-extension');
+  h.type('str');
+  h.notifyState({settings:{enabled:false,layout:'default'}});
+  h.type('eet');
+  h.typing.shown=false;h.result.shown=true;
+  await h.changed();
+  assert.equal(h.saves.length,0);
+  h.notifyState({settings:{enabled:true,layout:'default'}});
+  h.typing.shown=true;h.result.shown=false;h.replaceWord();
+  await h.changed();h.type('street');
+  h.typing.shown=false;h.result.shown=true;
+  await h.changed();
+  assert.equal(h.saves.length,1);
 });

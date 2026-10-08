@@ -3,6 +3,37 @@ if (typeof importScripts === 'function') {
 }
 const extensionApi = globalThis.browser ?? globalThis.chrome;
 const defaults = { enabled: true, layout: 'default' };
+// Storage events include entire old/new histories. Keep their deserialization out
+// of the typing process; content scripts receive only this small UI projection.
+async function notifyTypingPages(changes, area) {
+  if (area !== 'local' || (!changes.settings && !changes.dailies && !changes.theme)) return;
+  const { settings = defaults, dailies = [], theme = 'dark' } =
+    await extensionApi.storage.local.get(['settings', 'dailies', 'theme']);
+  const message = { type: 'KEYLOOM_STATE_CHANGED' };
+  if (changes.settings) {
+    message.settings = {
+      enabled: Boolean(settings.enabled),
+      layout: settings.layout === 'alternate' ? 'alternate' : 'default',
+    };
+  }
+  if (changes.theme) message.theme = theme;
+  if (changes.settings || changes.dailies) {
+    message.today = KeyloomDaily.todaySummary(dailies, settings.layout);
+  }
+  // Querying IDs needs no tabs/host permission. Only our content scripts can
+  // receive this message; closed tabs and tabs without a receiver are expected.
+  const tabs = await extensionApi.tabs.query({});
+  await Promise.all(tabs.filter(tab => Number.isInteger(tab.id)).map(async tab => {
+    try {
+      await extensionApi.tabs.sendMessage(tab.id, message, { frameId: 0 });
+    } catch { /* No Keyloom receiver, or the tab navigated/closed. */ }
+  }));
+}
+extensionApi.storage.onChanged.addListener((changes, area) => {
+  void notifyTypingPages(changes, area).catch(() => {
+    console.warn('Keyloom: could not notify typing pages of a state change');
+  });
+});
 // Serialize read-modify-write operations from multiple Monkeytype tabs.
 let queue = Promise.resolve();
 function dailyContinuation(dailies, url) {

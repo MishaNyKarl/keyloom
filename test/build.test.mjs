@@ -26,7 +26,10 @@ test('packages keep shared sources and load the Firefox event page in manifest o
     assert.ok(!(await readdir(firefox)).includes('test'));
     let listener;
     const context = vm.createContext({ crypto: webcrypto, URL, TextEncoder,
-      browser: { runtime: { onMessage: { addListener: fn => listener = fn } } }
+      browser: {
+        runtime: { onMessage: { addListener: fn => listener = fn } },
+        storage: { onChanged: { addListener() {} } },
+      }
     });
     for (const script of manifest.background.scripts) {
       vm.runInContext(await readFile(path.join(firefox, script), 'utf8'), context);

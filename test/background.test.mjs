@@ -52,16 +52,31 @@ async function harness(firefox = false) {
   const core = await readFile(new URL('../extension/core.js', import.meta.url), 'utf8');
   const source = await readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
   const storage = { sessions: [], settings: { enabled: true, layout: 'default' } };
-  let handler;
+  let handler, storageListener;
   const context = vm.createContext({ crypto: webcrypto, TextEncoder, TextDecoder, AbortSignal, console, URL, structuredClone });
   const scripts = Object.fromEntries(await Promise.all(['core.js','analytics.js','learning.js','daily.js','words.js','vendor/lz-string.js','practice.js','sync.js'].map(async name=>[name,await readFile(new URL('../extension/'+name,import.meta.url),'utf8')])));
   context.importScripts = (...names) => names.forEach(name=>vm.runInContext(scripts[name], context));
-  const opened=[], updated=[];
+  const opened=[], updated=[], notifications=[], storageReads=[];
   context.chrome = {
     permissions: { contains: async () => true },
     runtime: { id: 'test-extension', getURL: path => `chrome-extension://test-extension/${path}`, onMessage: { addListener: fn => handler = fn } },
-    storage: { local: { get: async () => structuredClone(storage), set: async values => Object.assign(storage, structuredClone(values)) } },
-    tabs: { update: async (id, options) => { updated.push({id, ...options}); }, create: async options => {opened.push(options.url);return { id: 1 };} },
+    storage: { onChanged:{addListener:fn=>storageListener=fn}, local: {
+      get: async keys => {
+        storageReads.push(keys);
+        return structuredClone(Object.fromEntries(keys.filter(key=>Object.hasOwn(storage,key))
+          .map(key=>[key,storage[key]])));
+      },
+      set: async values => Object.assign(storage, structuredClone(values)),
+    } },
+    tabs: {
+      query: async () => [{id:7},{id:8},{id:9}],
+      sendMessage: async (id, message, options) => {
+        if (id === 9) throw new Error('No receiver');
+        notifications.push({id,message:structuredClone(message),options});
+      },
+      update: async (id, options) => { updated.push({id, ...options}); },
+      create: async options => {opened.push(options.url);return { id: 1 };},
+    },
   };
   if (firefox) {
     context.browser = context.chrome;
@@ -82,7 +97,12 @@ async function harness(firefox = false) {
     {target:'cat',wordIndex:0,position:1,typed:'a',type:'insert',time:120},
     {target:'cat',wordIndex:0,position:2,typed:'t',type:'insert',time:230},
   ], {id});
-  return { storage, send, session, opened, updated, context };
+  return { storage, send, session, opened, updated, context, notifications, storageReads,
+    async notify(changes, area='local') {
+      storageListener(changes,area);
+      await new Promise(resolve=>setImmediate(resolve));
+    },
+  };
 }
 for (const firefox of [false, true]) {
   test('in-place continuation persists once and resume reuses its prepared exercise: ' + firefox, async () => {
@@ -604,3 +624,32 @@ test('JSON transfer resumes a 15 of 30 plan on its first unfinished step in anot
   assert.equal(url.searchParams.get('keyloomStep'), plan.steps[15].id);
   assert.notEqual(destination.storage.dailies.find(row => row.id === plan.id).steps[15].exerciseId, 'old-browser-exercise');
 });
+
+for (const firefox of [false, true]) {
+  test('storage changes notify typing tabs without histories or plans: ' + firefox, async () => {
+    const h = await harness(firefox);
+    const {plan} = await h.send({type:'CREATE_DAILY',options:{languages:'english'}},
+      h.context[firefox ? 'browser' : 'chrome'].runtime.getURL('dashboard.html'));
+    h.storage.sessions = Array.from({length:1000}, (_, i)=>({id:'synthetic-' + i}));
+    h.storage.learning = {privateVocabulary:'synthetic'};
+    h.storage.theme = 'repose-dark';
+    h.storageReads.length = 0;
+    await h.notify({sessions:{newValue:h.storage.sessions},learning:{newValue:h.storage.learning}});
+    assert.equal(h.notifications.length,0);
+    assert.equal(h.storageReads.length,0);
+    await h.notify({dailies:{newValue:[plan]},settings:{newValue:h.storage.settings},
+      theme:{newValue:'repose-dark'},sessions:{newValue:h.storage.sessions}});
+    assert.equal(h.notifications.length,2);
+    for (const {message,options} of h.notifications) {
+      assert.deepEqual(Object.keys(message).sort(),['settings','theme','today','type']);
+      assert.equal(message.type,'KEYLOOM_STATE_CHANGED');
+      assert.equal(message.today.done,0);
+      assert.equal(message.theme,'repose-dark');
+      assert.equal(options.frameId,0);
+      assert.ok(JSON.stringify(message).length < 300);
+    }
+    assert.deepEqual(h.storageReads.map(keys=>Array.from(keys)),[['settings','dailies','theme']]);
+    await h.notify({settings:{newValue:h.storage.settings}},'sync');
+    assert.equal(h.notifications.length,2);
+  });
+}
