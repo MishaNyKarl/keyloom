@@ -67,7 +67,7 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
     },
     KeyloomKeyboard:{create(options){keyboard=options;return {open(){}};}},
     KeyloomConfiguration:{selected:()=>true,read:()=>({ok:true})},
-    chrome:{runtime:{async sendMessage(message){
+    chrome:{runtime:{getManifest:()=>({version:'1.0.8'}),async sendMessage(message){
       messages.push(message);
       if(message.type==='GET_STATE') return {ok:true,settings:{enabled:true,layout:'default'},training,today};
       if(message.type==='SAVE_SESSION'){saves.push(message.session);if(deferSave)return new Promise(resolve=>{resolveSave=resolve;});return {ok:true,saved:true,daily};}
@@ -108,6 +108,84 @@ async function harness(training=null, firefox=false, daily=null, today=null, def
     async clickRestart(){callbacks.click({target:{closest:()=>true}});await settle();},
   };
 }
+
+for (const page of ['account', 'home']) {
+  test('Alt+N resumes today after leaving test markers: ' + page, async () => {
+    const h = await harness(null, false, {completed:false}, {done:3, total:30});
+    h.type('street');
+    h.typing.shown = false;
+    h.result.shown = true;
+    await h.changed();
+    h.context.location.pathname = page === 'account' ? '/account' : '/';
+    h.context.location.href = 'https://monkeytype.com' + h.context.location.pathname;
+    const next = h.keyboard.commands.find(command => command.key === 'KeyN');
+    assert.equal(next.available(), true);
+    await next.run();
+    assert.equal(h.messages.at(-1).type, 'RESUME_TODAY');
+    assert.equal(h.messages.at(-1).pageUrl, undefined);
+    assert.equal(h.messages.some(message => message.type === 'NEXT_DAILY'), false);
+    assert.doesNotMatch(h.badge.textContent, /Не удалось/);
+  });
+}
+
+test('initial state on account does not send a test-only page URL', async () => {
+  const h = await harness();
+  h.context.location.pathname = '/account';
+  h.context.location.href = 'https://monkeytype.com/account';
+  // Reload the actual adapter, simulating a document initially opened on /account.
+  h.context.__keyloomLoaded = false;
+  vm.runInContext(await readFile(new URL('../extension/content.js', import.meta.url), 'utf8'), h.context);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.messages.filter(message => message.type === 'GET_STATE').at(-1).pageUrl, undefined);
+});
+
+test('opt-in diagnostics measures capture and exports no input or route identifiers', async () => {
+  const h = await harness();
+  const timers = [];
+  const blobs = [];
+  class ReportURL extends URL {
+    static createObjectURL(blob) { blobs.push(blob); return 'blob:report'; }
+    static revokeObjectURL() {}
+  }
+  h.context.URL = ReportURL;
+  h.context.Blob = Blob;
+  h.context.setTimeout = callback => timers.push(callback);
+  const create = h.context.document.createElement;
+  const downloads = [];
+  h.context.document.createElement = tag => {
+    const node = create(tag);
+    node.click = () => downloads.push(node.download);
+    return node;
+  };
+  const command = label => h.keyboard.commands.find(row => row.label === label);
+  assert.equal(command('Скачать диагностику').available(), false);
+  command('Включить диагностику').run();
+  h.type('street');
+  h.typing.shown = false;
+  h.result.shown = true;
+  await h.changed();
+  timers.shift()();
+  h.context.document.hidden = true;
+  h.callbacks.visibilitychange();
+  h.context.document.hidden = false;
+  h.callbacks.visibilitychange();
+  timers.shift()();
+  command('Скачать диагностику').run();
+  const serialized = await blobs[0].text();
+  const report = JSON.parse(serialized);
+  assert.equal(report.metrics.inputHandlers.count, 6);
+  assert.equal(report.metrics.activeWordQueries.count, 1);
+  assert.equal(report.metrics.analysis.count, 1);
+  assert.equal(report.metrics.eventLoopDelay.count, 1);
+  assert.equal(report.tests[0].saved, true);
+  assert.deepEqual(downloads, ['keyloom-diagnostics.json']);
+  assert.doesNotMatch(serialized, /street|monkeytype\.com|keyloomDaily|keyloomStep|pageUrl/);
+  command('Выключить диагностику').run();
+  assert.equal(command('Скачать диагностику').available(), true);
+  const pending = timers.length;
+  timers.shift()();
+  assert.equal(timers.length, pending - 1);
+});
 test('normal completion survives the interval where both panels are hidden',async()=>{
   const h=await harness();h.type('street');h.typing.shown=false;
   for(let i=0;i<20;i++) await h.changed();

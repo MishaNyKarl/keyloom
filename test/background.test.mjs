@@ -23,6 +23,7 @@ for (const firefox of [false, true]) {
       training:{id:current.exerciseId,kind:current.kind,targets:[],seconds:30}};
     const saved = await h.send({type:'SAVE_SESSION',session:result}, url);
     assert.equal(saved.dailyStep, 'mismatch');
+    assert.equal(saved.dailyStepReason, 'incomplete');
     assert.equal(saved.daily, null);
     const after = (await h.send({type:'GET_TODAY_PROGRESS'}, url)).today;
     assert.equal(after.done, 14);
@@ -388,6 +389,13 @@ for (const firefox of [false, true]) {
     assert.equal(reply.ok, true);
     assert.equal(reply.started, true);
     assert.equal(h.updated.at(-1).id, 7);
+    assert.equal(new URL(h.updated.at(-1).url).searchParams.get('keyloomStep'), plan.steps[1].id);
+    assert.equal(h.storage.dailies[0].steps[0].result.id, 'completed');
+    const accountState = await h.send({type:'GET_STATE'}, 'https://monkeytype.com/account');
+    assert.equal(accountState.ok, true);
+    assert.equal(accountState.today.done, 1);
+    const accountResume = await h.send({type:'RESUME_TODAY'}, 'https://monkeytype.com/account');
+    assert.equal(accountResume.started, true);
     assert.equal(new URL(h.updated.at(-1).url).searchParams.get('keyloomStep'), plan.steps[1].id);
     assert.equal(h.storage.dailies[0].steps[0].result.id, 'completed');
     const opened = await h.send({type:'RESUME_TODAY'},page);

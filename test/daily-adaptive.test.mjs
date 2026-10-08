@@ -13,6 +13,34 @@ const session = (language, wpm) => ({id:language, date:now, language, layout:'de
   status:'completed', mode:'time', duration:60, wpm, accuracy:98, presses:300,
   chars:{}, pairs:{}, words:{}, sequences:{}});
 
+test('credit diagnostics shares the actual completion gates without exposing IDs', () => {
+  const step = {id:'step', type:'time', language:'english', startedAt:now,
+    seconds:15, wordset:'english_5k'};
+  const plan = {id:'plan', layout:'default', steps:[step]};
+  const result = {...session('english', 60), id:'result', duration:15};
+  const url = 'https://monkeytype.com/?keyloomDaily=plan&keyloomStep=step';
+  const cases = [
+    ['layout', {...plan, layout:'other'}, result, 15, 'english_5k'],
+    ['step', {...plan, steps:[{...step, id:'other'}]}, result, 15, 'english_5k'],
+    ['not-started', {...plan, steps:[{...step, startedAt:null}]}, result, 15, 'english_5k'],
+    ['start-time', plan, {...result, date:now - 1}, 15, 'english_5k'],
+    ['incomplete', plan, {...result, status:'abandoned'}, 15, 'english_5k'],
+    ['language', plan, {...result, language:'russian'}, 15, 'english_5k'],
+    ['mode', plan, {...result, mode:'words'}, 15, 'english_5k'],
+    ['dictionary', plan, result, 15, 'english'],
+    ['duration', plan, result, 30, 'english_5k'],
+    ['exercise', {...plan, steps:[{...step, type:'custom', exerciseId:'exercise'}]}, result, 15, 'english_5k']
+  ];
+  for (const [reason, current, incoming, seconds, wordset] of cases) {
+    assert.equal(d.completionReason(current, incoming, url, seconds, wordset), reason);
+    assert.equal(d.complete([current], incoming, url, seconds, wordset)[0], current);
+  }
+  assert.equal(d.completionReason(undefined, result, url), 'plan');
+  assert.equal(d.completionReason(plan, result, url, 15, 'english_5k'), null);
+  assert.equal(d.complete([plan], result, url, 15, 'english_5k')[0].steps[0].result.id, 'result');
+  assert.equal(d.completionReason({...plan, steps:[{...step, result:{id:'result'}}]}, result, url), 'duplicate');
+});
+
 test('daily texts rotate, both language orders are possible and saved routes stay stable', () => {
   for (const goal of ['balanced', 'adaptive']) {
     const englishFirst = d.create({goal}, [], 'default', now, 'first', () => .1);

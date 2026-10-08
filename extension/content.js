@@ -15,16 +15,77 @@
   let lifecycleObserver, bootstrapObserver, observedFirst;
   let observedNodes = new Map(), wordTargets = new WeakMap();
   let activeWord = null;
+  let diagnostics = null;
+  let lastDiagnostics = null;
+  let visibilityGeneration = 0;
+  function metric(name, elapsed = 0) {
+    if (!diagnostics) return;
+    const row = diagnostics.metrics[name] ??= {count:0, totalMs:0, maxMs:0, over16Ms:0};
+    row.count++;
+    row.totalMs += elapsed;
+    row.maxMs = Math.max(row.maxMs, elapsed);
+    if (elapsed > 16) row.over16Ms++;
+  }
+  function diagnosticEvent(name) {
+    if (!diagnostics) return;
+    diagnostics.events.push({name, elapsedMs:performance.now() - diagnostics.started});
+    if (diagnostics.events.length > 100) diagnostics.events.shift();
+  }
+  function startDiagnostics() {
+    const report = {version:extensionApi.runtime.getManifest().version,
+      started:performance.now(), metrics:{}, events:[], tests:[], mutationRecords:0};
+    diagnostics = report;
+    lastDiagnostics = report;
+    // Opt-in sampling ends after ten minutes. No input, URLs or account data.
+    function pulse() {
+      const due = performance.now() + 250;
+      const generation = visibilityGeneration;
+      setTimeout(() => {
+        if (diagnostics !== report) return;
+        if (!document.hidden && generation === visibilityGeneration) {
+          metric('eventLoopDelay', Math.max(0, performance.now() - due));
+        }
+        if (performance.now() - report.started < 600000) pulse();
+        else diagnosticEvent('sampling-ended');
+      }, 250);
+    }
+    pulse();
+    status = 'Диагностика включена · пройдите тест и скачайте отчёт через Alt+K';
+    paint();
+  }
+  function downloadDiagnostics() {
+    const snapshot = diagnostics ?? lastDiagnostics;
+    if (!snapshot) return;
+    const {version, metrics, events, tests, mutationRecords, started} = snapshot;
+    const report = {format:1, version, durationMs:performance.now() - started,
+      metrics, events, tests, mutationRecords};
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)],
+      {type:'application/json'}));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'keyloom-diagnostics.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   const send = async message => {
     try {
-      const routed = ['GET_STATE', 'SAVE_SESSION', 'NEXT_DAILY'].includes(message.type);
+      const routed = ['SAVE_SESSION', 'NEXT_DAILY'].includes(message.type) ||
+        (message.type === 'GET_STATE' && location.pathname === '/');
+      diagnosticEvent('send-' + message.type);
       const reply = await extensionApi.runtime.sendMessage(routed ?
         {pageUrl:location.href, ...message} : message);
       if (!reply?.ok) throw new Error(reply?.error ?? 'Нет связи с расширением');
       return reply;
-    } catch (error) { status = 'Не сохранено · обновите вкладку'; paint(); throw error; }
+    } catch (error) {
+      diagnosticEvent('message-failed');
+      status = 'Не сохранено · обновите вкладку'; paint(); throw error;
+    }
   };
-  const visible = el => !!el && !el.closest('.hidden') && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const visible = el => {
+    metric('visibilityChecks');
+    return !!el && !el.closest('.hidden') && el.getClientRects().length > 0 &&
+      getComputedStyle(el).visibility !== 'hidden';
+  };
   // Repeated attribute writes can invalidate the host's cursor/style state while typing.
   function setAttributeIfChanged(node, name, value) {
     if (node.getAttribute(name) !== value) node.setAttribute(name, value);
@@ -78,7 +139,7 @@
     if (panel.inert !== Boolean(session)) panel.inert = Boolean(session);
     const label = `Keyloom: ${settings.enabled ? status : 'На паузе'}`;
     if (badge.textContent !== label) badge.textContent = label;
-    const hideNext = !dailyState || dailyState.completed || Boolean(session) || !settings.enabled;
+    const hideNext = !canAdvance() || Boolean(session);
     if (nextButton.hidden !== hideNext) nextButton.hidden = hideNext;
     if (nextButton.disabled !== advancing) nextButton.disabled = advancing;
     const nextLabel = advancing ? 'Открываю…' : 'Следующее задание (Alt+N)';
@@ -102,12 +163,27 @@
     }
     return advance();
   }
+  function canAdvance() {
+    const away = location.pathname !== '/' ||
+      !new URL(location.href).searchParams.has('keyloomDaily');
+    return settings.enabled && (away ? todayProgress?.done < todayProgress?.total :
+      Boolean(dailyState) && !dailyState.completed);
+  }
   async function advance() {
-    if (advancing || session || !dailyState || dailyState.completed) return;
+    if (advancing || session || !canAdvance()) return;
     advancing = true;
     status = 'Открываю следующее задание…';
     paint();
     try {
+      const params = new URL(location.href).searchParams;
+      if (location.pathname !== '/' || !params.has('keyloomDaily') || !params.has('keyloomStep')) {
+        diagnosticEvent('resume-after-navigation');
+        await pendingSave;
+        await send({type:'RESUME_TODAY'});
+        advancing = false;
+        paint();
+        return;
+      }
       const reply = await send({type:'NEXT_DAILY', inPlace:true});
       if (!reply.url) {
         return;
@@ -184,7 +260,10 @@
     session = null;
     if (!finished || finished.events.length < 2) return;
     if(finished.training && (statusValue==='completed' && finished.maxWordIndex!==trainingPlan?.words.length-1)) delete finished.training;
+    const analysisStart = diagnostics ? performance.now() : 0;
     const result = core.analyze(finished.events, { ...finished, status: statusValue });
+    if (diagnostics) metric('analysis', performance.now() - analysisStart);
+    diagnosticEvent('finish-' + statusValue);
     // Persist aggregates only. Raw input and the full test text never leave this content script.
     savingId = result.id;
     dailyState = null;
@@ -199,6 +278,23 @@
       if (requested) queuedAdvanceId = null;
       if(reply.saved)lastSavedId=result.id;
       dailyState = reply.daily ?? null;
+      diagnosticEvent(reply.saved ? 'save-accepted' : 'save-ignored');
+      if (reply.dailyStep) diagnosticEvent('step-' + reply.dailyStep);
+      if (diagnostics) {
+        const params = new URL(finished.pageUrl).searchParams;
+        diagnostics.tests.push({status:statusValue, events:finished.events.length,
+          mode:['time', 'words', 'custom', 'quote'].includes(finished.mode) ? finished.mode : 'other',
+          language:['english', 'russian'].includes(finished.language) ? finished.language : 'other',
+          configuredSeconds:Number.isFinite(finished.configuredSeconds) ? finished.configuredSeconds : null,
+          hasPlan:params.has('keyloomDaily'), hasStep:params.has('keyloomStep'),
+          hasExercise:params.has('keyloomExercise'), training:Boolean(finished.training),
+          saved:Boolean(reply.saved), step:['completed', 'mismatch'].includes(reply.dailyStep) ?
+            reply.dailyStep : 'none',
+          reason:['plan', 'layout', 'duplicate', 'step', 'not-started', 'start-time',
+            'incomplete', 'language', 'mode', 'dictionary', 'duration', 'exercise',
+            'invalid-session'].includes(reply.dailyStepReason) ? reply.dailyStepReason : null});
+        if (diagnostics.tests.length > 10) diagnostics.tests.shift();
+      }
       if (session) return; // A delayed save response must not overwrite a new test's status.
       status = 'На паузе';
       if (reply.saved) {
@@ -210,7 +306,13 @@
         }
         if (dailyState?.completed) status = 'Ежедневный план завершён!';
         if (statusValue === 'completed' && reply.dailyStep === 'mismatch') {
-          status = 'Тест сохранён · шаг не засчитан: открой его из плана';
+          const reasons = {plan:'план не найден', layout:'другая раскладка',
+            step:'не совпал шаг', 'not-started':'шаг не был запущен',
+            'start-time':'тест начат раньше шага', incomplete:'тест прерван',
+            language:'другой язык', mode:'другой режим', dictionary:'другой словарь',
+            duration:'другая длительность', exercise:'не совпало упражнение'};
+          status = 'Тест сохранён · шаг не засчитан: ' +
+            (reasons[reply.dailyStepReason] ?? 'открой его из плана');
         }
       }
       paint();
@@ -222,6 +324,12 @@
     });
   }
   function check() {
+    if (!diagnostics) return checkLifecycle();
+    const start = performance.now();
+    try { return checkLifecycle(); }
+    finally { metric('lifecycleChecks', performance.now() - start); }
+  }
+  function checkLifecycle() {
     bindLifecycle();
     const first = wordsRoot?.querySelector('.word');
     observedFirst = first;
@@ -302,6 +410,8 @@
     }
   }
   function onLifecycleMutation(records) {
+    metric('mutationBatches');
+    if (diagnostics) diagnostics.mutationRecords = (diagnostics.mutationRecords ?? 0) + records.length;
     let changed = false;
     for (const record of records) {
       if (notificationRoot?.contains(record.target)) {
@@ -330,6 +440,14 @@
     if (changed) queueCheck();
   }
   function capture(event) {
+    if (!diagnostics || event.target?.id !== 'wordsInput' || !event.isTrusted) {
+      return captureInput(event);
+    }
+    const start = performance.now();
+    try { return captureInput(event); }
+    finally { metric('inputHandlers', performance.now() - start); }
+  }
+  function captureInput(event) {
     if (event.target?.id !== 'wordsInput' || !settings.enabled || !event.isTrusted || advancing) return;
     // Timestamp before DOM work so the adapter's own cost is not counted as
     // typing time. Layout and UI work belong to lifecycle transitions only.
@@ -341,6 +459,7 @@
     if (disabledForTest) return;
     if (!testVisible || resultVisible || session?.abortReason) return;
     if (!activeWord?.classList.contains('active') || activeWord.isConnected === false) {
+      metric('activeWordQueries');
       activeWord = wordsRoot?.querySelector('.word.active');
     }
     const node = activeWord;
@@ -387,6 +506,7 @@
   }
   document.addEventListener('beforeinput', capture, true);
   document.addEventListener('visibilitychange', () => {
+    visibilityGeneration++;
     if (!document.hidden) void refreshProgress();
     if (document.hidden && session) {
       const last = session.events.at(-1);
@@ -410,7 +530,7 @@
           run:() => pendingSave.then(() => send({type:'START_WARMUP',
             language:KeyloomConfiguration.read(document).language ?? trainingPlan?.language ?? 'english'}))},
         {label:'Следующее задание', alias:'next daily lesson', key:'KeyN',
-          available:() => canQueueAdvance() || (settings.enabled && Boolean(dailyState) && !dailyState.completed && !advancing),
+          available:() => canQueueAdvance() || (canAdvance() && !advancing),
           canRunWhenBlocked:canQueueAdvance,
           run:requestAdvance},
         {label:'Открыть Keyloom', alias:'dashboard overview', key:'KeyO',
@@ -419,7 +539,12 @@
           return todayProgress && todayProgress.done < todayProgress.total
             ? 'Продолжить сегодняшний план' : 'Составить сегодняшний план';
         }, alias:'daily plan сегодня создать продолжить',
-          run:() => pendingSave.then(() => send({type:'RESUME_TODAY'}))}
+          run:() => pendingSave.then(() => send({type:'RESUME_TODAY'}))},
+        {label:'Включить диагностику', alias:'diagnostics лаги диагностика', run:startDiagnostics},
+        {label:'Скачать диагностику', alias:'diagnostics export отчёт',
+          available:() => Boolean(diagnostics ?? lastDiagnostics), run:downloadDiagnostics},
+        {label:'Выключить диагностику', alias:'diagnostics stop',
+          available:() => Boolean(diagnostics), run:() => { diagnostics = null; }}
       ]
     });
     const menu = document.createElement('button');

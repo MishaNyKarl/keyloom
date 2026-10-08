@@ -282,21 +282,29 @@
       daily.prefs.punctuation, daily.prefs.numbers, step.wordset ?? step.language, 'normal', []];
     return 'https://monkeytype.com/?testSettings=' + LZString.compressToEncodedURIComponent(JSON.stringify(settings));
   }
-  function complete(dailies, session, url, configuredSeconds, configuredWordset) {
+  function completionReason(daily, session, url, configuredSeconds, configuredWordset) {
     const query = new URL(url).searchParams;
+    if (!daily || daily.id !== query.get('keyloomDaily')) return 'plan';
+    if (daily.layout !== session.layout) return 'layout';
+    if (daily.steps.some(row => row.result?.id === session.id)) return 'duplicate';
+    const step = daily.steps.find(row => !row.result);
+    if (!step || step.id !== query.get('keyloomStep')) return 'step';
+    if (!step.startedAt) return 'not-started';
+    if (session.date < step.startedAt) return 'start-time';
+    if (session.status !== 'completed') return 'incomplete';
+    if (session.language !== step.language) return 'language';
+    const native = ['time', 'quote'].includes(step.type);
+    if (native && (session.mode !== step.type || session.training)) return 'mode';
+    if (step.wordset && configuredWordset !== step.wordset) return 'dictionary';
+    if (step.type === 'time' && (configuredSeconds !== undefined ?
+      configuredSeconds !== step.seconds : Math.abs(session.duration - step.seconds) > 5)) return 'duration';
+    if (!native && session.training?.id !== step.exerciseId) return 'exercise';
+    return null;
+  }
+  function complete(dailies, session, url, configuredSeconds, configuredWordset) {
     return dailies.map(daily => {
-      if (daily.id !== query.get('keyloomDaily') || daily.layout !== session.layout) return daily;
+      if (completionReason(daily, session, url, configuredSeconds, configuredWordset)) return daily;
       const index = daily.steps.findIndex(step => !step.result);
-      const step = daily.steps[index];
-      if (!step || step.id !== query.get('keyloomStep') || !step.startedAt ||
-        session.date < step.startedAt || session.status !== 'completed' || session.language !== step.language ||
-        daily.steps.some(row => row.result?.id === session.id)) return daily;
-      const native = ['time','quote'].includes(step.type);
-      if (native && (session.mode !== step.type || session.training)) return daily;
-      if (step.wordset && configuredWordset !== step.wordset) return daily;
-      if (step.type === 'time' && (configuredSeconds !== undefined ?
-        configuredSeconds !== step.seconds : Math.abs(session.duration - step.seconds) > 5)) return daily;
-      if (!native && session.training?.id !== step.exerciseId) return daily;
       const next = structuredClone(daily);
       next.steps[index].result = {id:session.id,date:session.date,duration:session.duration,
         wpm:session.wpm,accuracy:session.accuracy};
@@ -433,5 +441,6 @@
     return {done:plan.steps.length - remaining.length, total:plan.steps.length,
       minutes:Math.ceil(remaining.reduce((sum, step) => sum + step.seconds, 0) / 60)};
   }
-  globalThis.KeyloomDaily = Object.freeze({options, create, schedule, exercise, nativeUrl, complete, progress, comparisons, results, importPlans, todaySummary});
+  globalThis.KeyloomDaily = Object.freeze({options, create, schedule, exercise, nativeUrl,
+    complete, completionReason, progress, comparisons, results, importPlans, todaySummary});
 })();

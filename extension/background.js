@@ -140,6 +140,13 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       }
       const next = KeyloomCore.mergeSessions(sessions, [incoming]);
       const accepted = next.find(row => row.id === incoming.id);
+      const planId = new URL(pageUrl).searchParams.get('keyloomDaily');
+      let dailyStepReason;
+      if (planId) {
+        dailyStepReason = accepted ? KeyloomDaily.completionReason(
+          dailies.find(plan => plan.id === planId), accepted, pageUrl,
+          message.configuredSeconds, message.configuredWordset) : 'invalid-session';
+      }
       let updatedDailies = accepted ? KeyloomDaily.complete(dailies, accepted, pageUrl,
         message.configuredSeconds, message.configuredWordset) : dailies;
       const newlyCompleted = updatedDailies.some(plan => plan.steps.every(step => step.result) &&
@@ -167,7 +174,8 @@ extensionApi.runtime.onMessage.addListener((message, sender, respond) => {
       if (new URL(pageUrl).searchParams.has('keyloomDaily')) {
         dailyStep = updatedDailies.some(plan => plan.steps.some(step => step.result?.id === incoming.id)) ? 'completed' : 'mismatch';
       }
-      return { saved: true, dailyStep, daily:dailyContinuation(updatedDailies, pageUrl) };
+      return { saved: true, dailyStep, dailyStepReason,
+        daily:dailyContinuation(updatedDailies, pageUrl) };
     }
     if (message.type === 'OPEN_DASHBOARD') {
       const result=sessions.find(s=>s.id===message.sessionId);
